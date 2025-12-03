@@ -7,6 +7,7 @@ import torch.nn as nn
 from sklearn.preprocessing import MinMaxScaler
 import plotly.graph_objects as go
 from datetime import timedelta
+import requests
 
 torch.set_float32_matmul_precision("medium")  # Faster on newer CPUs
 np.set_printoptions(suppress=True)
@@ -19,55 +20,20 @@ st.set_page_config(page_title="Stock AI Predictor", layout="wide", page_icon="�
 
 st.markdown(
     """
-    <style>
-    .header {
-        font-size:28px;
-        font-weight:700;
-        background: linear-gradient(90deg,#005bea,#00c6fb);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        padding-bottom: 4px;
-    }
-    .subtle {
-        color: #6b7280;
-        margin-top: -10px;
-        margin-bottom: 10px;
-    }
-    .card {
-        background: white;
-        border-radius: 12px;
-        padding: 18px 20px;
-        height:0px;
-        box-shadow: 0 6px 18px rgba(0,0,0,0.06);
-        min-height: 120px;
-        display:flex;
-        flex-direction:column;
-        justify-content:space-between;
-        border:1px solid #f3f4f6;
-    }
-    .metric-title { color:#6b7280; font-size:12px; margin-bottom:6px; }
-
-    .card h2,.card h3{
-    margin:0;
-    padding:0;}
-
-    [data-testid="column"]{
-    padding-right:10px;}
-
-    .status-row{
-    display:flex;
-    align-items:center;
-    gap:8px;
-    }
-
-    .status-dot{
-    width:12px;
-    height:12px;
-    border-radius:50%;
-    background:#22c55e;
-    }
-    </style>
-    """,
+<style>
+.header { font-size:28px; font-weight:700; background: linear-gradient(90deg,#005bea,#00c6fb);
+-webkit-background-clip: text; -webkit-text-fill-color: transparent; padding-bottom: 4px; }
+.subtle { color: #6b7280; margin-top: -10px; margin-bottom: 10px; }
+.card { background: white; border-radius: 12px; padding: 18px 20px; height:0px; 
+box-shadow: 0 6px 18px rgba(0,0,0,0.06); min-height: 120px; display:flex; flex-direction:column; 
+justify-content:space-between; border:1px solid #f3f4f6; }
+.metric-title { color:#6b7280; font-size:12px; margin-bottom:6px; }
+.card h2,.card h3{ margin:0; padding:0; }
+[data-testid="column"]{ padding-right:10px; }
+.status-row{ display:flex; align-items:center; gap:8px; }
+.status-dot{ width:12px; height:12px; border-radius:50%; background:#22c55e; }
+</style>
+""",
     unsafe_allow_html=True,
 )
 
@@ -79,93 +45,56 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+
 # ---------------------------
-# Model Status Renderer (single card)
+# Model Status Renderer
 # ---------------------------
 def render_model_status(status: str):
     if status == "pending":
-        return """
-        <div class='card'>
-            <div class='metric-title'>Model Status</div>
-            <h4>🟡 Pending</h4>
-            <p style='opacity:0.75;margin-top:-12px;'>Click <b>Run Prediction</b> to start.</p>
-        </div>
-        """
-
+        return "<div class='card'><div class='metric-title'>Model Status</div><h4>🟡 Pending</h4><p style='opacity:0.75;margin-top:-12px;'>Click <b>Run Prediction</b> to start.</p></div>"
     elif status == "training":
         return """
-        <style>
-        @keyframes blink {
-          0% { opacity: 0.2; } 
-          20% { opacity: 1; } 
-          100% { opacity: 0.2; }
-        }
-        .blink span { 
-          animation: blink 1.4s infinite both;
-        }
-        .blink span:nth-child(2) { animation-delay:.2s; }
-        .blink span:nth-child(3) { animation-delay:.4s; }
+        <style>@keyframes blink {0% {opacity:0.2;} 20% {opacity:1;} 100% {opacity:0.2;}}
+        .blink span {animation: blink 1.4s infinite both;}
+        .blink span:nth-child(2) { animation-delay:.2s; } .blink span:nth-child(3) { animation-delay:.4s; }
         </style>
-
-        <div class='card'>
-            <div class='metric-title'>Model Status</div>
-            <h4 class='blink'>🟢 Training<span>.</span><span>.</span><span>.</span></h4>
-            <p style='opacity:0.75;margin-top:-12px;'>Learning from 2 years of data...</p>
-        </div>
+        <div class='card'><div class='metric-title'>Model Status</div>
+        <h4 class='blink'>🟢 Training<span>.</span><span>.</span><span>.</span></h4>
+        <p style='opacity:0.75;margin-top:-12px;'>Learning from 2 years of data...</p></div>
         """
-
     elif status == "completed":
-        return """
-        <div class='card'>
-            <div class='metric-title'>Model Status</div>
-            <h4 style='color:#4caf50;'>✅ Completed</h4>
-            <p style='opacity:0.75;margin-top:-12px;'>Predictions generated.</p>
-        </div>
-        """
-
+        return "<div class='card'><div class='metric-title'>Model Status</div><h4 style='color:#4caf50;'>✅ Completed</h4><p style='opacity:0.75;margin-top:-12px;'>Predictions generated.</p></div>"
     elif status == "failed":
-        return """
-        <div class='card'>
-            <div class='metric-title'>Model Status</div>
-            <h4 style='color:#ff5252;'>❌ Failed</h4>
-            <p style='opacity:0.75;margin-top:-12px;'>Check logs & retry.</p>
-        </div>
-        """
-
+        return "<div class='card'><div class='metric-title'>Model Status</div><h4 style='color:#ff5252;'>❌ Failed</h4><p style='opacity:0.75;margin-top:-12px;'>Check logs & retry.</p></div>"
     else:
         return "<p>Invalid model status</p>"
 
 
 # ---------------------------
-# Model (core logic)
+# LSTM Model
 # ---------------------------
 class Brain(nn.Module):
     def __init__(self, input_size=1, hidden_size=50, num_layers=1):
         super().__init__()
-        self.input_size = input_size
-        self.hidden_size = hidden_size
-        self.num_layers = num_layers
         self.lstm = nn.LSTM(
-            input_size=self.input_size,
-            hidden_size=self.hidden_size,
-            num_layers=self.num_layers,
+            input_size=input_size,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
             batch_first=True,
         )
-        self.fc = nn.Linear(self.hidden_size, 1)
+        self.fc = nn.Linear(hidden_size, 1)
 
     def forward(self, x):
-        # Accept (seq, input) or (batch, seq, input)
         if x.dim() == 2:
             x = x.unsqueeze(0)
-        batch = x.size(0)
-        h0 = torch.zeros(self.num_layers, batch, self.hidden_size)
-        c0 = torch.zeros(self.num_layers, batch, self.hidden_size)
+        h0 = torch.zeros(1, x.size(0), 50)
+        c0 = torch.zeros(1, x.size(0), 50)
         out, _ = self.lstm(x, (h0, c0))
         return self.fc(out[:, -1, :])
 
 
 # ---------------------------
-# Helpers (cached)
+# Helpers
 # ---------------------------
 @st.cache_data(show_spinner=False)
 def download_data(symbol: str, period: str = "2y"):
@@ -178,44 +107,74 @@ def prepare_sequences(close_values: np.ndarray, seq: int = 60):
     scaled = scaler.fit_transform(close_values.astype(np.float32))
     X, y = [], []
     for i in range(seq, len(scaled)):
-        X.append(scaled[i - seq : i, :])  # (seq,1)
-        y.append(scaled[i, :])  # (1,)
-    X = np.array(X)
-    y = np.array(y)
-    return X, y, scaler, scaled
+        X.append(scaled[i - seq : i, :])
+        y.append(scaled[i, :])
+    return np.array(X), np.array(y), scaler, scaled
 
 
 def get_future_dates(last_date, n):
     future_dates = []
     tmp = last_date
     while len(future_dates) < n:
-        tmp = tmp + timedelta(days=1)
-        if tmp.weekday() < 5:  # skip weekends
+        tmp += timedelta(days=1)
+        if tmp.weekday() < 5:
             future_dates.append(tmp)
     return future_dates
 
 
 # ---------------------------
-# Sidebar controls
+# Sidebar 
 # ---------------------------
 with st.sidebar:
     st.header("Controls")
-    companies = {
-        "Reliance Industries": "RELIANCE.NS",
-        "Tata Motors": "TATAMOTORS.NS",
-        "HDFC Bank": "HDFCBANK.NS",
-        "Infosys": "INFY.NS",
-        "TCS": "TCS.NS",
-        "SBI": "SBIN.NS",
-        "ICICI Bank": "ICICIBANK.NS",
-        "Bajaj Finance": "BAJFINANCE.NS",
-        "Adani Enterprises": "ADANIENT.NS",
-        "Wipro": "WIPRO.NS",
-        "L&T": "LT.NS",
-        "Maruti Suzuki": "MARUTI.NS",
-    }
-    choice = st.selectbox("Choose company", list(companies.keys()))
-    symbol = companies[choice]
+
+    query = st.text_input("Search company", placeholder="Type company name...")
+
+    company_options = []
+    algolia_raw = {}
+
+    if query and len(query) >= 2:
+        try:
+            ALGOLIA_APP_ID = "XM6V4TK0GI"
+            ALGOLIA_API_KEY = "f2739da0f5b32535dc8b656db109394c"
+            ALGOLIA_INDEX_NAME = "sec_list"
+            url = f"https://{ALGOLIA_APP_ID}-dsn.algolia.net/1/indexes/{ALGOLIA_INDEX_NAME}/query"
+            headers = {
+                "X-Algolia-API-Key": ALGOLIA_API_KEY,
+                "X-Algolia-Application-Id": ALGOLIA_APP_ID,
+                "Content-Type": "application/json",
+            }
+            payload = {"params": f"query={query}&hitsPerPage=10"}
+            resp = requests.post(url, json=payload, headers=headers, timeout=5)
+
+            if resp.status_code == 200:
+                algolia_raw = resp.json()  # Save raw response for debugging
+                hits = algolia_raw.get("hits", [])
+                company_options = [
+                    (h.get("Security Name", ""), h.get("Symbol", ""))
+                    for h in hits
+                    if h.get("Security Name") and h.get("Symbol")
+                ]
+            else:
+                st.error(f"Algolia request failed with status {resp.status_code}")
+        except Exception as e:
+            st.error(f"Algolia search error: {e}")
+
+    # Show results if available
+    if company_options:
+        choice = st.selectbox("Choose company", [c[0] for c in company_options])
+        symbol = dict(company_options)[choice]
+        yf_symbol=symbol+'.NS'
+    else:
+        st.info("Start typing to see company suggestions...")
+        symbol = None
+        yf_symbol=None
+
+    # ---- Debug panel ----
+    with st.expander("Debug: Algolia raw response"):
+        st.json(algolia_raw)  # Shows the raw JSON returned by Algolia
+
+    # Other controls
     days_ahead = st.slider("Predict next how many trading days?", 1, 30, 10)
     retrain_every_run = st.checkbox("Retrain model every run", value=True)
     seq_len = st.number_input(
@@ -223,22 +182,26 @@ with st.sidebar:
     )
     epochs = st.slider("Training epochs", 5, 200, 35)
     st.markdown("---")
-    st.caption(
-        "Note: This demo trains on CPU and is intentionally simple. Not financial advice."
+    st.caption("Demo trains on CPU. Not financial advice.")
+
+
+# ---------------------------
+# Stop if no company is selected
+# ---------------------------
+if symbol is None:
+    st.warning(
+        "Please select a company from the search box before running predictions."
     )
+    st.stop()
 
 # ---------------------------
-# Main UI / Workflow
+# Prediction code
 # ---------------------------
-# Session state for model status
-if "model_status" not in st.session_state:
-    st.session_state.model_status = "pending"
-
 run = st.button("Run Prediction")
-
-if run or True:
+if run:
     with st.spinner("Fetching data..."):
-        df = download_data(symbol, period="2y")
+        df = download_data(yf_symbol, period="2y")
+
     if df is None or df.empty:
         st.error("No data returned for this symbol.")
         st.stop()
@@ -251,36 +214,27 @@ if run or True:
     if len(close) < 100:
         st.error("Not enough data (need at least 100 close prices).")
         st.stop()
-
     dates = close.index
     close_vals = close.values.reshape(-1, 1).astype(np.float32)
     latest_price = float(close_vals[-1, 0])
-
     X, y, scaler, scaled_all = prepare_sequences(close_vals, seq=seq_len)
 
     if X.ndim != 3 or X.shape[2] != 1:
         st.error(f"Unexpected X shape: {X.shape}. Expect (N, {seq_len}, 1).")
         st.stop()
 
+    # --- Status cards ---
     col_a, col_b, col_c = st.columns([1, 1, 1])
     col_a.markdown(
-        "<div class='card'><div class='metric-title'>Latest Close</div><h2>₹{:.2f}</h2></div>".format(
-            latest_price
-        ),
+        f"<div class='card'><div class='metric-title'>Latest Close</div><h2>₹{latest_price:.2f}</h2></div>",
         unsafe_allow_html=True,
     )
-    naive_next = latest_price
     col_b.markdown(
-        "<div class='card'><div class='metric-title'>Naive (last) Price</div><h3>₹{:.2f}</h3></div>".format(
-            naive_next
-        ),
+        f"<div class='card'><div class='metric-title'>Naive (last) Price</div><h3>₹{latest_price:.2f}</h3></div>",
         unsafe_allow_html=True,
     )
-
     status_placeholder = col_c.empty()
-    status_placeholder.markdown(
-        render_model_status(st.session_state.model_status), unsafe_allow_html=True
-    )
+    status_placeholder.markdown(render_model_status("pending"), unsafe_allow_html=True)
 
     left, right = st.columns([1, 2])
 
@@ -288,9 +242,10 @@ if run or True:
         st.subheader("Model training")
         st.write("Training a small LSTM on the last 2 years of closing prices.")
 
-        # Set status to training (update the single placeholder)
         st.session_state.model_status = "training"
-        status_placeholder.markdown(render_model_status("training"), unsafe_allow_html=True)
+        status_placeholder.markdown(
+            render_model_status("training"), unsafe_allow_html=True
+        )
 
         try:
             model = Brain(input_size=1, hidden_size=50, num_layers=1)
@@ -310,7 +265,6 @@ if run or True:
                 loss = loss_fn(out, y_t)
                 loss.backward()
                 optimizer.step()
-                # update UI
                 progress_fraction = (ep + 1) / epochs
                 progress_bar.progress(progress_fraction)
                 progress_text.text(f"Epoch {ep+1}/{epochs} — loss {loss.item():.6f}")
@@ -318,13 +272,16 @@ if run or True:
             progress_text.text("Training complete.")
             st.success("Model trained ✅")
 
-            # update status to completed (single placeholder)
             st.session_state.model_status = "completed"
-            status_placeholder.markdown(render_model_status("completed"), unsafe_allow_html=True)
+            status_placeholder.markdown(
+                render_model_status("completed"), unsafe_allow_html=True
+            )
 
         except Exception as e:
             st.session_state.model_status = "failed"
-            status_placeholder.markdown(render_model_status("failed"), unsafe_allow_html=True)
+            status_placeholder.markdown(
+                render_model_status("failed"), unsafe_allow_html=True
+            )
             st.error(f"Training failed: {e}")
             st.stop()
 

@@ -8,7 +8,6 @@ from sklearn.preprocessing import MinMaxScaler
 import plotly.graph_objects as go
 from datetime import timedelta
 
-# Add these 3 lines at the very top (after imports)
 torch.set_float32_matmul_precision("medium")  # Faster on newer CPUs
 np.set_printoptions(suppress=True)
 pd.set_option("display.float_format", "{:.2f}".format)
@@ -37,10 +36,36 @@ st.markdown(
     .card {
         background: white;
         border-radius: 12px;
-        padding: 14px;
+        padding: 18px 20px;
+        height:0px;
         box-shadow: 0 6px 18px rgba(0,0,0,0.06);
+        min-height: 120px;
+        display:flex;
+        flex-direction:column;
+        justify-content:space-between;
+        border:1px solid #f3f4f6;
     }
-    .metric-title { color:#6b7280; font-size:12px; }
+    .metric-title { color:#6b7280; font-size:12px; margin-bottom:6px; }
+
+    .card h2,.card h3{
+    margin:0;
+    padding:0;}
+
+    [data-testid="column"]{
+    padding-right:10px;}
+
+    .status-row{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    }
+
+    .status-dot{
+    width:12px;
+    height:12px;
+    border-radius:50%;
+    background:#22c55e;
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -53,6 +78,62 @@ st.markdown(
     "<div class='subtle'>Yahoo Finance + simple LSTM — small demo (not financial advice)</div>",
     unsafe_allow_html=True,
 )
+
+# ---------------------------
+# Model Status Renderer (single card)
+# ---------------------------
+def render_model_status(status: str):
+    if status == "pending":
+        return """
+        <div class='card'>
+            <div class='metric-title'>Model Status</div>
+            <h4>🟡 Pending</h4>
+            <p style='opacity:0.75;margin-top:-12px;'>Click <b>Run Prediction</b> to start.</p>
+        </div>
+        """
+
+    elif status == "training":
+        return """
+        <style>
+        @keyframes blink {
+          0% { opacity: 0.2; } 
+          20% { opacity: 1; } 
+          100% { opacity: 0.2; }
+        }
+        .blink span { 
+          animation: blink 1.4s infinite both;
+        }
+        .blink span:nth-child(2) { animation-delay:.2s; }
+        .blink span:nth-child(3) { animation-delay:.4s; }
+        </style>
+
+        <div class='card'>
+            <div class='metric-title'>Model Status</div>
+            <h4 class='blink'>🟢 Training<span>.</span><span>.</span><span>.</span></h4>
+            <p style='opacity:0.75;margin-top:-12px;'>Learning from 2 years of data...</p>
+        </div>
+        """
+
+    elif status == "completed":
+        return """
+        <div class='card'>
+            <div class='metric-title'>Model Status</div>
+            <h4 style='color:#4caf50;'>✅ Completed</h4>
+            <p style='opacity:0.75;margin-top:-12px;'>Predictions generated.</p>
+        </div>
+        """
+
+    elif status == "failed":
+        return """
+        <div class='card'>
+            <div class='metric-title'>Model Status</div>
+            <h4 style='color:#ff5252;'>❌ Failed</h4>
+            <p style='opacity:0.75;margin-top:-12px;'>Check logs & retry.</p>
+        </div>
+        """
+
+    else:
+        return "<p>Invalid model status</p>"
 
 
 # ---------------------------
@@ -114,23 +195,6 @@ def get_future_dates(last_date, n):
     return future_dates
 
 
-# Replace the status_placeholder part with this cleaner version:
-status_placeholder = st.empty()
-
-
-def update_status(message: str, type: str = "info"):
-    colors = {
-        "info": "#1f77b4",
-        "success": "#2ca02c",
-        "warning": "#ff7f0e",
-        "error": "#d62728",
-    }
-    status_placeholder.markdown(
-        f"<div style='padding:12px; background:{colors.get(type, '#1f77b4')}22; border-radius:8px; color:{colors.get(type, '#1f77b4')}; font-weight:600;'>{message}</div>",
-        unsafe_allow_html=True,
-    )
-
-
 # ---------------------------
 # Sidebar controls
 # ---------------------------
@@ -166,9 +230,12 @@ with st.sidebar:
 # ---------------------------
 # Main UI / Workflow
 # ---------------------------
+# Session state for model status
+if "model_status" not in st.session_state:
+    st.session_state.model_status = "pending"
+
 run = st.button("Run Prediction")
 
-# Auto-run when changing company or when button pressed
 if run or True:
     with st.spinner("Fetching data..."):
         df = download_data(symbol, period="2y")
@@ -210,43 +277,60 @@ if run or True:
         unsafe_allow_html=True,
     )
 
-    col_c.markdown(
-        "<div class='card'><div class='metric-title'>Model status</div><h3>Training will start</h3></div>",
-        unsafe_allow_html=True,
+    status_placeholder = col_c.empty()
+    status_placeholder.markdown(
+        render_model_status(st.session_state.model_status), unsafe_allow_html=True
     )
 
-    
     left, right = st.columns([1, 2])
 
     with left:
         st.subheader("Model training")
         st.write("Training a small LSTM on the last 2 years of closing prices.")
-        model = Brain(input_size=1, hidden_size=50, num_layers=1)
-        optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-        loss_fn = nn.MSELoss()
 
-        X_t = torch.from_numpy(X).float()  # (N, seq, 1)
-        y_t = torch.from_numpy(y).float()  # (N, 1)
+        # Set status to training (update the single placeholder)
+        st.session_state.model_status = "training"
+        status_placeholder.markdown(render_model_status("training"), unsafe_allow_html=True)
 
-        progress_text = st.empty()
-        progress_bar = st.progress(0)
+        try:
+            model = Brain(input_size=1, hidden_size=50, num_layers=1)
+            optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+            loss_fn = nn.MSELoss()
 
-        model.train()
-        for ep in range(epochs):
-            optimizer.zero_grad()
-            out = model(X_t)  # (N,1)
-            loss = loss_fn(out, y_t)
-            loss.backward()
-            optimizer.step()
-            # update UI
-            progress_fraction = (ep + 1) / epochs
-            progress_bar.progress(progress_fraction)
-            progress_text.text(f"Epoch {ep+1}/{epochs} — loss {loss.item():.6f}")
+            X_t = torch.from_numpy(X).float()  # (N, seq, 1)
+            y_t = torch.from_numpy(y).float()  # (N, 1)
 
-        progress_text.text("Training complete.")
-        st.success("Model trained ✅")
+            progress_text = st.empty()
+            progress_bar = st.progress(0)
+
+            model.train()
+            for ep in range(epochs):
+                optimizer.zero_grad()
+                out = model(X_t)  # (N,1)
+                loss = loss_fn(out, y_t)
+                loss.backward()
+                optimizer.step()
+                # update UI
+                progress_fraction = (ep + 1) / epochs
+                progress_bar.progress(progress_fraction)
+                progress_text.text(f"Epoch {ep+1}/{epochs} — loss {loss.item():.6f}")
+
+            progress_text.text("Training complete.")
+            st.success("Model trained ✅")
+
+            # update status to completed (single placeholder)
+            st.session_state.model_status = "completed"
+            status_placeholder.markdown(render_model_status("completed"), unsafe_allow_html=True)
+
+        except Exception as e:
+            st.session_state.model_status = "failed"
+            status_placeholder.markdown(render_model_status("failed"), unsafe_allow_html=True)
+            st.error(f"Training failed: {e}")
+            st.stop()
+
+        # switch to eval mode for prediction
         model.eval()
-        # ────── PREDICTION WITH NICE PROGRESS BAR ──────
+
         pred_container = st.container()
         with pred_container:
             st.write("Generating future predictions...")
@@ -271,12 +355,9 @@ if run or True:
                     f"Predicting day **{i+1}/{days_ahead}** → ₹{p:.2f}"
                 )
 
-        # Clean up
         pred_progress.progress(1.0)
         pred_status.success("All predictions ready!")
-        pred_container.empty()  
-        # removes the temporary container
-        # ───────────────────────────────────────────────
+        pred_container.empty()
         pred_prices = scaler.inverse_transform(np.array(preds).reshape(-1, 1)).flatten()
         future_dates = get_future_dates(dates[-1], days_ahead)
         pred_df = pd.DataFrame(
@@ -329,6 +410,8 @@ if run or True:
             )
         except Exception:
             pass
+
+        # plot predictions
         fig.add_trace(
             go.Scatter(
                 x=future_dates,

@@ -17,14 +17,13 @@ pd.set_option("display.float_format", "{:.2f}".format)
 # Page config & CSS
 # ---------------------------
 st.set_page_config(page_title="Stock AI Predictor", layout="wide", page_icon="📈")
-
 st.markdown(
     """
 <style>
 .header { font-size:28px; font-weight:700; background: linear-gradient(90deg,#005bea,#00c6fb);
 -webkit-background-clip: text; -webkit-text-fill-color: transparent; padding-bottom: 4px; }
 .subtle { color: #6b7280; margin-top: -10px; margin-bottom: 10px; }
-.card { background: white; border-radius: 12px; padding: 18px 20px; height:0px; 
+.card { background: white; border-radius: 12px; padding: 18px 20px; height:0px; margin:30px 0;
 box-shadow: 0 6px 18px rgba(0,0,0,0.06); min-height: 120px; display:flex; flex-direction:column; 
 justify-content:space-between; border:1px solid #f3f4f6; }
 .metric-title { color:#6b7280; font-size:12px; margin-bottom:6px; }
@@ -123,16 +122,57 @@ def get_future_dates(last_date, n):
 
 
 # ---------------------------
-# Sidebar 
+# Sidebar
 # ---------------------------
 with st.sidebar:
-    st.header("Controls")
+    st.header("Controls & Search")
 
-    query = st.text_input("Search company", placeholder="Type company name...")
+    # ---- Single search input ----
+    query = st.text_input(
+        "Search company", placeholder="Type company name...", key="search_inp"
+    )
+
+    st.markdown(
+        """
+<style>
+[data-testid="stTextInput"] > div > div > input {
+    padding-left: 38px !important;   /* space for logo */
+}
+
+/* Logo container */
+.logo-icon {
+    position: absolute;
+    left: 10px;
+    bottom: 29px;
+    width: 20px;
+    height: 20px;
+    opacity: 0.7;
+}
+
+/* Position wrapper */
+.stTextInput {
+    position: relative;
+}
+</style>
+
+<div class="logo-icon">
+    <img src="https://logosandtypes.com/wp-content/uploads/2023/11/algolia.svg" width="20"/>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
+
+    # ---- Initialize session state ----
+    if "company_name" not in st.session_state:
+        st.session_state["company_name"] = None
+    if "company_symbol" not in st.session_state:
+        st.session_state["company_symbol"] = None
 
     company_options = []
-    algolia_raw = {}
+    symbol = None
+    yf_symbol = None
 
+    # ---- Algolia search ----
     if query and len(query) >= 2:
         try:
             ALGOLIA_APP_ID = "XM6V4TK0GI"
@@ -146,33 +186,54 @@ with st.sidebar:
             }
             payload = {"params": f"query={query}&hitsPerPage=10"}
             resp = requests.post(url, json=payload, headers=headers, timeout=5)
+            hits = resp.json().get("hits", []) if resp.status_code == 200 else []
 
-            if resp.status_code == 200:
-                algolia_raw = resp.json()  # Save raw response for debugging
-                hits = algolia_raw.get("hits", [])
-                company_options = [
-                    (h.get("Security Name", ""), h.get("Symbol", ""))
-                    for h in hits
-                    if h.get("Security Name") and h.get("Symbol")
-                ]
-            else:
-                st.error(f"Algolia request failed with status {resp.status_code}")
+            company_options = [
+                {"name": h.get("Security Name", ""), "symbol": h.get("Symbol", "")}
+                for h in hits
+            ]
         except Exception as e:
             st.error(f"Algolia search error: {e}")
 
-    # Show results if available
+    # ---- Show suggestions as buttons ----
     if company_options:
-        choice = st.selectbox("Choose company", [c[0] for c in company_options])
-        symbol = dict(company_options)[choice]
-        yf_symbol=symbol+'.NS'
+        st.markdown("**Suggestions:**")
+        for c in company_options:
+            if st.button(f"{c['name']} ({c['symbol']})"):
+                st.session_state["company_name"] = c["name"]
+                st.session_state["company_symbol"] = c["symbol"]
+
+        # ---- Dropdown to choose company ----
+        choice = st.selectbox(
+            "Choose company",
+            [c["name"] for c in company_options],
+            index=next(
+                (
+                    i
+                    for i, c in enumerate(company_options)
+                    if c["name"] == st.session_state.get("company_name")
+                ),
+                0,
+            ),
+        )
+
+        # Update session state if dropdown changed
+        selected_company = next(
+            (c for c in company_options if c["name"] == choice), None
+        )
+        if selected_company:
+            st.session_state["company_name"] = selected_company["name"]
+            st.session_state["company_symbol"] = selected_company["symbol"]
+
+    # ---- Final selection ----
+    if st.session_state.get("company_symbol"):
+        symbol = st.session_state["company_symbol"]
+        yf_symbol = symbol + ".NS"
+        st.success(f"Selected: {st.session_state['company_name']} ({symbol})")
     else:
         st.info("Start typing to see company suggestions...")
         symbol = None
-        yf_symbol=None
-
-    # ---- Debug panel ----
-    with st.expander("Debug: Algolia raw response"):
-        st.json(algolia_raw)  # Shows the raw JSON returned by Algolia
+        yf_symbol = None
 
     # Other controls
     days_ahead = st.slider("Predict next how many trading days?", 1, 30, 10)

@@ -1,4 +1,5 @@
 import streamlit as st
+import os
 import yfinance as yf
 import pandas as pd
 import numpy as np
@@ -13,6 +14,14 @@ torch.set_float32_matmul_precision("medium")  # Faster on newer CPUs
 np.set_printoptions(suppress=True)
 pd.set_option("display.float_format", "{:.2f}".format)
 
+# mode = st.toggle("🌗 Dark Mode", value=True, key="theme_mode")
+
+# if st.session_state.theme_mode:
+#     os.environ["STREAMLIT_CONFIG_FILE"] = "config_dark.toml"
+# else:
+#     os.environ["STREAMLIT_CONFIG_FILE"] = "config_light.toml"
+
+# st.rerun()  # reloads app with new config
 # ---------------------------
 # Page config & CSS
 # ---------------------------
@@ -45,6 +54,7 @@ st.markdown(
     "<div class='subtle'>Yahoo Finance + simple LSTM — small demo (not financial advice)</div>",
     unsafe_allow_html=True,
 )
+
 
 
 # ---------------------------

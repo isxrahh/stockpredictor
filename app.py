@@ -31,9 +31,6 @@ justify-content:space-between; border:1px solid #f3f4f6; }
 [data-testid="column"]{ padding-right:10px; }
 .status-row{ display:flex; align-items:center; gap:8px; }
 .status-dot{ width:12px; height:12px; border-radius:50%; background:#22c55e; }
-    /* Hide Streamlit header & hamburger menu */
-    header {visibility: hidden;}
-    .css-18e3th9 {visibility: hidden;}
     </style>
 """,
     unsafe_allow_html=True,
@@ -98,10 +95,39 @@ class Brain(nn.Module):
 # ---------------------------
 # Helpers
 # ---------------------------
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, ttl=3600)
 def download_data(symbol: str, period: str = "2y"):
-    df = yf.download(symbol, period=period, progress=False)
-    return df
+    TWELVE_DATA_KEY = st.secrets.get("TWELVE_DATA_KEY") or "your_key_here"
+    if TWELVE_DATA_KEY != "5a1f3871569543aca6034279f126b3c8":
+        url = f"https://api.twelvedata.com/time_series"
+        params = {
+            "symbol": symbol.replace(".NS", ""),  # Twelve Data uses RELIANCE, not RELIANCE.NS
+            "interval": "1day",
+            "outputsize": 730,  # ~2 years
+            "apikey": TWELVE_DATA_KEY,
+            "dp": 5,
+            "format": "JSON"
+        }
+        try:
+            resp = requests.get(url, params=params, timeout=10)
+            data = resp.json()
+            if "values" in data:
+                df = pd.DataFrame(data["values"])
+                df["datetime"] = pd.to_datetime(df["datetime"])
+                df = df.set_index("datetime")
+                df = df[["close"]].rename(columns={"close": "Close"})
+                df["Close"] = df["Close"].astype(float)
+                df = df.sort_index()
+                return df
+        except:
+            pass
+
+    # Fallback to yfinance
+    ticker = symbol + ".NS" if not symbol.endswith((".NS", ".BO")) else symbol
+    df = yf.download(ticker, period=period, progress=False)
+    if df.empty or "Close" not in df.columns:
+        return None
+    return df[["Close"]].dropna()
 
 
 def prepare_sequences(close_values: np.ndarray, seq: int = 60):

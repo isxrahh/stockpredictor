@@ -40,6 +40,7 @@ justify-content:space-between; border:1px solid #f3f4f6; }
     unsafe_allow_html=True,
 )
 
+st.session_state.show_widgets = False
 
 st.markdown(
     "<div class='header big-font'>AI Stock Prediction Dashboard</div>",
@@ -49,9 +50,6 @@ st.markdown(
     "<div class='subtle'>Yahoo Finance + simple LSTM — small demo (not financial advice)</div>",
     unsafe_allow_html=True,
 )
-
-
-
 
 # ---------------------------
 # Model Status Renderer
@@ -295,6 +293,46 @@ with st.sidebar:
         symbol = None
     # ────────────────────── NOW "symbol" ALWAYS EXISTS ──────────────────────
 
+# ---------- Robust TradingView symbol selection ----------
+# `symbol` here is what you get from Algolia, e.g. "TCS" or "RELIANCE" or "AAPL"
+base_sym = symbol.upper() if symbol else ""
+
+def build_tv_candidates(base):
+    # Prioritized guess-list — prefer Indian exchanges first (NSE/BSE),
+    # then US exchanges, then plain base as last resort.
+    if not base:
+        return [""]
+
+    candidates = []
+    # Indian style (user likely searching Indian stocks)
+    candidates.append(f"NSE:{base}")
+    candidates.append(f"BSE:{base}")
+    # Common global prefixes
+    candidates.append(f"NASDAQ:{base}")
+    candidates.append(f"NYSE:{base}")
+    # Plain ticker (some widgets accept just the base)
+    candidates.append(base)
+    # dedupe while preserving order
+    seen = set(); uniq = []
+    for c in candidates:
+        if c not in seen:
+            uniq.append(c); seen.add(c)
+    return uniq
+
+tv_candidates = build_tv_candidates(base_sym)
+
+# Show the candidates and let user pick — default to first (NSE:...) so Indian tickers map nicely.
+st.write("Suggested TradingView candidates (pick one that renders):")
+chosen_tv = st.selectbox("TradingView symbol", tv_candidates, index=0, help="If widget shows 'invalid symbol' try a different candidate here")
+
+# set final variables used by widgets
+tv_symbol = chosen_tv
+trend_symbol = base_sym  # Trendlyne uses just the base (no exchange)
+
+# Debug prints (remove or hide later)
+st.write("DEBUG TV SYMBOL:", tv_symbol)
+st.write("DEBUG Trend Symbol:", trend_symbol)
+
 
 # ---------------------------
 # Stop if no company is selected
@@ -393,7 +431,7 @@ if symbol is None:
                       "title": "Tesla"
                     },
                     {
-                      "proName": "NASDAQ:AAPL",
+                      "proName": "NASDAQ:APPL",
                       "title": "Apple"
                     },
                     {
@@ -499,6 +537,8 @@ else:
 # ---------------------------
 run = st.button("Run Prediction")
 if run:
+    st.session_state.show_widgets = True
+
     with st.spinner("Fetching data..."):
         df = download_data(yf_symbol, period="2y")
 
@@ -742,5 +782,120 @@ if run:
         }
     )
     st.table(display_df)
+
+if st.session_state.get("show_widgets", False):
+
+    # ---------- TOP ROW ----------
+    col3, col4 = st.columns([3, 2])
+    
+    with col3:
+        st.components.v1.html(
+            f"""
+            <div style="width:97%; height:235px; background:#1e1e1f; border-radius:5px; border: 0.2px solid #474647; padding:2px;">
+              <div class="tradingview-widget-container">
+                <div class="tradingview-widget-container__widget"></div>
+                <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-symbol-info.js" async>
+                {{
+                  "symbol": "{tv_symbol}",
+                  "colorTheme": "dark",
+                  "isTransparent": true,
+                  "locale": "en",
+                  "width": "97%"
+                }}
+                </script>
+              </div>
+            </div>
+            """,
+            height=252
+        )
+    
+    with col4:
+        st.components.v1.html(
+            f"""
+            <div style="border-radius:12px; margin-left:-4px; ">
+            
+              <blockquote 
+                class="trendlyne-widgets"
+                data-get-url="https://trendlyne.com/web-widget/swot-widget/Poppins/{trend_symbol}/?posCol=60a5fa&primaryCol=3b82f6&negCol=ef4444&neuCol=f59e0b" 
+                data-theme="dark"
+                style="color:inherit;"
+                ">
+              </blockquote>
+              <script async src="https://cdn-static.trendlyne.com/static/js/webwidgets/tl-widgets.js"></script>
+            </div>
+            """,
+            height=310
+        )
+    
+    
+    # ---------- MAIN ROW ----------
+    col1, col2 = st.columns([2, 3])
+    
+    with col1:
+        # Technical Analysis Widget
+        st.components.v1.html(
+            f"""
+            <div style=" height:500px; border-radius:12px; padding:0 4px;">
+              <div class="tradingview-widget-container">
+                <div class="tradingview-widget-container__widget"></div>
+                <script src="https://s3.tradingview.com/external-embedding/embed-widget-technical-analysis.js" async>
+                {{
+                  "symbol": "{tv_symbol}",
+                  "colorTheme": "dark",
+                  "displayMode": "single",
+                  "locale": "en",
+                  "width": "100%",
+                  "height": "100%"
+                }}
+                </script>
+              </div>
+            </div>
+            """,
+            height=520
+        )
+    
+        # Profile Widget
+        st.components.v1.html(
+            f"""
+            <div style=" height:470px; border-radius:12px;">
+              <div class="tradingview-widget-container">
+                <div class="tradingview-widget-container__widget"></div>
+                <script src="https://s3.tradingview.com/external-embedding/embed-widget-symbol-profile.js" async>
+                {{
+                  "symbol": "{tv_symbol}",
+                  "colorTheme": "dark",
+                  "locale": "en",
+                  "width": "100%",
+                  "height": "100%"
+                }}
+                </script>
+              </div>
+            </div>
+            """,
+            height=490
+        )
+    
+    with col2:
+        st.components.v1.html(
+            f"""
+            <div style="height:1000px; border-radius:12px;">
+              <div class="tradingview-widget-container">
+                <div class="tradingview-widget-container__widget"></div>
+                <script src="https://s3.tradingview.com/external-embedding/embed-widget-financials.js" async>
+                {{
+                  "symbol": "{tv_symbol}",
+                  "colorTheme": "dark",
+                  "displayMode": "regular",
+                  "locale": "en",
+                  "width": "100%",
+                  "height": "100%"
+                }}
+                </script>
+              </div>
+            </div>
+            """,
+            height=1020
+        )
+    
 
 st.caption("Demo app — Not financial advice. Data via Yahoo Finance & TwelveData API.")

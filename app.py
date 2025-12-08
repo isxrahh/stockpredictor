@@ -40,13 +40,18 @@ justify-content:space-between; border:1px solid #f3f4f6; }
     unsafe_allow_html=True,
 )
 
+
 st.markdown(
-    "<div class='header big-font'>AI Stock Prediction Dashboard</div>", unsafe_allow_html=True
+    "<div class='header big-font'>AI Stock Prediction Dashboard</div>",
+    unsafe_allow_html=True,
 )
 st.markdown(
     "<div class='subtle'>Yahoo Finance + simple LSTM — small demo (not financial advice)</div>",
     unsafe_allow_html=True,
 )
+
+
+
 
 # ---------------------------
 # Model Status Renderer
@@ -104,12 +109,14 @@ def download_data(symbol: str, period: str = "2y"):
     if TWELVE_DATA_KEY != "5a1f3871569543aca6034279f126b3c8":
         url = f"https://api.twelvedata.com/time_series"
         params = {
-            "symbol": symbol.replace(".NS", ""),  # Twelve Data uses RELIANCE, not RELIANCE.NS
+            "symbol": symbol.replace(
+                ".NS", ""
+            ),  # Twelve Data uses RELIANCE, not RELIANCE.NS
             "interval": "1day",
             "outputsize": 730,  # ~2 years
             "apikey": TWELVE_DATA_KEY,
             "dp": 5,
-            "format": "JSON"
+            "format": "JSON",
         }
         try:
             resp = requests.get(url, params=params, timeout=10)
@@ -282,9 +289,9 @@ with st.sidebar:
     st.markdown("---")
     st.caption("Demo trains on CPU. Not financial advice.")
     # ────────────────────── SAFETY CHECK – DO NOT PUT ANYTHING ABOVE THIS ──────────────────────
-    if 'symbol' not in locals() and st.session_state.get("company_symbol"):
+    if "symbol" not in locals() and st.session_state.get("company_symbol"):
         symbol = st.session_state["company_symbol"]
-    elif 'symbol' not in locals():
+    elif "symbol" not in locals():
         symbol = None
     # ────────────────────── NOW "symbol" ALWAYS EXISTS ──────────────────────
 
@@ -299,43 +306,190 @@ if symbol is None:
     ## OTHER WIDGETS OF TRADING VIEW
 
     # Live S&P 500 Heatmap — Embed TradingView
-    st.markdown("### Live Nifty 50 Heatmap (by TradingView)")
-    
+    st.markdown("### Live Nifty 50 Heatmap")
+
     st.components.v1.html(
         """
         <div style="width: 100%; height: 660px; margin: 0; padding: 0;">
-           
-    <div class="tradingview-widget-container">
-      <div class="tradingview-widget-container__widget"></div>
-      <div class="tradingview-widget-copyright"><a href="https://www.tradingview.com/heatmap/stock/" rel="noopener nofollow" target="_blank"><span class="blue-text">Stock Heatmap</span></a><span class="trademark"> by TradingView</span></div>
-      <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-stock-heatmap.js" async>
-      {
-      "dataSource": "SPX500",
-      "blockSize": "market_cap_basic",
-      "blockColor": "change",
-      "grouping": "sector",
-      "locale": "en",
-      "symbolUrl": "",
-      "colorTheme": "dark", 
-      "exchanges": [],
-      "hasTopBar": false,
-      "isDataSetEnabled": false,
-      "isZoomEnabled": true,
-      "hasSymbolTooltip": true,
-      "isMonoSize": false,
-      "width": "100%",
-      "height": "100%"
-    }
-      </script>
-    </div>
-    <!-- TradingView Widget END -->
+            <div class="tradingview-widget-container">
+                <div class="tradingview-widget-container__widget"></div>
+                    <div class="tradingview-widget-copyright"><a href="https://www.tradingview.com/heatmap/stock/" rel="noopener nofollow" target="_blank"><span class="blue-text">Stock Heatmap</span></a><span class="trademark"> by TradingView</span></div>
+                        <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-stock-heatmap.js" async>
+                            {
+                                "dataSource": "SPX500",
+                                "blockSize": "market_cap_basic",
+                                "blockColor": "change",
+                                "grouping": "sector",
+                                "locale": "en",
+                                "symbolUrl": "",
+                                "colorTheme": "dark", 
+                                "exchanges": [],
+                                "hasTopBar": false,
+                                "isDataSetEnabled": false,
+                                "isZoomEnabled": true,
+                                "hasSymbolTooltip": true,
+                                "isMonoSize": false,
+                                "width": "100%",
+                                "height": "100%"
+                            }
+                        </script>
+                    </div>
+                </div>
+            </div>
         </div>
         """,
         height=700,
-        scrolling=False
-        
+        scrolling=False,
     )
+
+    st.components.v1.html(
+        """
+            <div style="width: 100%; margin: 0; padding: 0;">
+                <!-- TradingView Widget BEGIN -->
+                <div class="tradingview-widget-container">
+                  <div class="tradingview-widget-container__widget"></div>
+                  <div class="tradingview-widget-copyright"><a href="https://www.tradingview.com/markets/" rel="noopener nofollow" target="_blank"><span class="blue-text">Ticker tape</span></a><span class="trademark"> by TradingView</span></div>
+                  <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-ticker-tape.js" async>
+                  {
+                  "symbols": [
+                    {
+                      "proName": "FOREXCOM:SPXUSD",
+                      "title": "S&P 500 Index"
+                    },
+                    {
+                      "proName": "FOREXCOM:NSXUSD",
+                      "title": "US 100 Cash CFD"
+                    },
+                    {
+                      "proName": "FX_IDC:EURUSD",
+                      "title": "EUR to USD"
+                    },
+                    {
+                      "proName": "BITSTAMP:BTCUSD",
+                      "title": "Bitcoin"
+                    },
+                    {
+                      "proName": "BITSTAMP:ETHUSD",
+                      "title": "Ethereum"
+                    },
+                    {
+                      "proName": "CAPITALCOM:GOLD",
+                      "title": "Gold"
+                    },
+                    {
+                      "proName": "NSE:NIFTY",
+                      "title": "Nifty 50 Index"
+                    },
+                    {
+                      "proName": "BSE:SENSEX",
+                      "title": "Sensex"
+                    },
+                    {
+                      "proName": "NSE:BSE",
+                      "title": "BSE"
+                    },
+                    {
+                      "proName": "NASDAQ:TSLA",
+                      "title": "Tesla"
+                    },
+                    {
+                      "proName": "NASDAQ:AAPL",
+                      "title": "Apple"
+                    },
+                    {
+                      "proName": "KRX:005930",
+                      "title": "Samsung"
+                    },
+                    {
+                      "proName": "NASDAQ:NVDA",
+                      "title": "Nvidia"
+                    },
+                    {
+                      "proName": "FX_IDC:USDINR",
+                      "title": "USDINR"
+                    },
+                    {
+                      "proName": "NSE:TCS",
+                      "title": "TCS"
+                    },
+                    {
+                      "proName": "NSE:BAJFINANCE",
+                      "title": "Bajaj Finance"
+                    }
+                  ],
+                  "colorTheme": "dark",
+                  "locale": "en",
+                  "largeChartUrl": "",
+                  "isTransparent": false,
+                  "showSymbolLogo": true,
+                  "displayMode": "adaptive"
+                }
+                  </script>
+                </div>
+                <!-- TradingView Widget END -->
+            </div>""",
+        scrolling=False,
+    )
+
+    col1, col2 = st.columns([3, 2])
+    with col1:
+        st.markdown("### Stock Screener")
+        st.components.v1.html(
+            """ <!-- TradingView Widget BEGIN -->
+           <div style="width: 100%; height: 660px; margin: 0; padding: 0;">
+               <!-- TradingView Widget BEGIN -->
+                <div class="tradingview-widget-container">
+                  <div class="tradingview-widget-container__widget"></div>
+                  <div class="tradingview-widget-copyright"><a href="https://www.tradingview.com/screener/" rel="noopener nofollow" target="_blank"><span class="blue-text">Stock Screener</span></a><span class="trademark"> by TradingView</span></div>
+                  <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-screener.js" async>
+                  {
+                  "market": "india",
+                  "showToolbar": true,
+                  "defaultColumn": "overview",
+                  "defaultScreen": "most_capitalized",
+                  "isTransparent": false,
+                  "locale": "en",
+                  "colorTheme": "dark",
+                  "width": "100%",
+                  "height": 550
+                }
+                  </script>
+                </div>
+               <!-- TradingView Widget END -->
+            </div>
+            """,
+            height=720,
+            scrolling=False,
+        )
+    with col2:
+        st.markdown("### Top Stories")
+        st.components.v1.html(
+            """
+                <!-- TradingView Widget BEGIN -->
+                <div style="width: 100%; height: 660px; margin: 0; padding: 0;">
+                <div class="tradingview-widget-container">
+                  <div class="tradingview-widget-container__widget"></div>
+                  <div class="tradingview-widget-copyright"><a href="https://www.tradingview.com/news/top-providers/tradingview/" rel="noopener nofollow" target="_blank"><span class="blue-text">Top stories</span></a><span class="trademark"> by TradingView</span></div>
+                  <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-timeline.js" async>
+                  {
+                  "displayMode": "regular",
+                  "feedMode": "all_symbols",
+                  "colorTheme": "dark",
+                  "isTransparent": false,
+                  "locale": "en",
+                  "width": 520,
+                  "height": 550
+                }
+                  </script>
+                </div>
+                </div>
+                <!-- TradingView Widget END -->
+            """,
+            height=700,
+            scrolling=False,
+        )
     st.stop()
+
 else:
     st.markdown(f"### {symbol} — AI Prediction")
 
@@ -363,26 +517,30 @@ if run:
     dates = close.index
     close_vals = close.values.reshape(-1, 1).astype(np.float32)
     latest_price = float(close_vals[-1, 0])
-     # ─────── 4 SAFE METRIC CARDS ───────
+    # ─────── 4 SAFE METRIC CARDS ───────
     c1, c2, c3, c4 = st.columns(4)
 
-   # Ensure scalars
+    # Ensure scalars
     latest_price = float(latest_price)
     close_21d = close.iloc[-21].item()
-    
+
     # 1M return
     ret_1m = 0.0
     if len(close) > 21:
         ret_1m = (latest_price / close_21d - 1) * 100
-    
+
     # Volatility (safe)
     vol = 0.0
     returns = close.pct_change().dropna()
     if len(returns) > 20:
-        last_vol = returns.rolling(20).std().iloc[-1] # ensure scalar
+        last_vol = returns.rolling(20).std().iloc[-1]  # ensure scalar
         vol = last_vol.item() * np.sqrt(252) * 100
-    
-    c1.metric("1M Return", f"{ret_1m:+.2f}%", delta=f"{ret_1m:+.1f}%" if abs(ret_1m) > 0.01 else None)
+
+    c1.metric(
+        "1M Return",
+        f"{ret_1m:+.2f}%",
+        delta=f"{ret_1m:+.1f}%" if abs(ret_1m) > 0.01 else None,
+    )
     c2.metric("Volatility", f"{vol:.1f}%" if vol > 0 else "—")
     c3.metric("52W High", f"₹{close.max().item():.2f}")
     c4.metric("Latest Price", f"₹{latest_price:.2f}")
@@ -557,7 +715,11 @@ if run:
     st.markdown("## Predictions")
     col1, col2 = st.columns(2)
     try:
-        latest_pred = pred_prices[-1].item() if hasattr(pred_prices, "item") else float(pred_prices[-1])
+        latest_pred = (
+            pred_prices[-1].item()
+            if hasattr(pred_prices, "item")
+            else float(pred_prices[-1])
+        )
     except Exception:
         latest_pred = None
 
@@ -582,4 +744,3 @@ if run:
     st.table(display_df)
 
 st.caption("Demo app — Not financial advice. Data via Yahoo Finance & TwelveData API.")
-

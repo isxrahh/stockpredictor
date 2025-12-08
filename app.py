@@ -327,14 +327,8 @@ chosen_tv = st.selectbox("TradingView symbol", tv_candidates, index=0, help="If 
 
 # set final variables used by widgets
 tv_symbol = chosen_tv
-trend_symbol = base_sym  # Trendlyne uses just the base (no exchange)
+trend_symbol = base_sym 
 
-# Debug prints (remove or hide later)
-st.write("DEBUG TV SYMBOL:", tv_symbol)
-st.write("DEBUG Trend Symbol:", trend_symbol)
-
-
-# ---------------------------
 # Stop if no company is selected
 # ---------------------------
 if symbol is None:
@@ -592,7 +586,7 @@ if run:
         st.stop()
 
     # --- Status cards ---
-    col_a, col_b, col_c = st.columns([1, 1, 1])
+    col_a, col_b, col_c = st.columns([1, 1, 1], gap="medium")
     col_a.markdown(
         f"<div class='card'><div class='metric-title'>Latest Close</div><h2>₹{latest_price:.2f}</h2></div>",
         unsafe_allow_html=True,
@@ -818,7 +812,7 @@ if st.session_state.get("show_widgets", False):
                 class="trendlyne-widgets"
                 data-get-url="https://trendlyne.com/web-widget/swot-widget/Poppins/{trend_symbol}/?posCol=60a5fa&primaryCol=3b82f6&negCol=ef4444&neuCol=f59e0b" 
                 data-theme="dark"
-                style="color:inherit;"
+                style="color:cornflowerblue;"
                 ">
               </blockquote>
               <script async src="https://cdn-static.trendlyne.com/static/js/webwidgets/tl-widgets.js"></script>

@@ -234,7 +234,7 @@ with st.sidebar:
                 for h in hits
             ]
             for opt in company_options:
-                if st.button(f"{opt['name']} ({opt['symbol']})", use_container_width=True):
+                if st.button(f"{opt['name']} ({opt['symbol']})", width="stretch"):
                     st.session_state.company_name = opt["name"]
                     st.session_state.company_symbol = opt["symbol"]
                     st.rerun()
@@ -335,7 +335,7 @@ if run:
 
    # Ensure scalars
     latest_price = float(latest_price)
-    close_21d = float(close.iloc[-21])
+    close_21d = close.iloc[-21].item()
     
     # 1M return
     ret_1m = 0.0
@@ -346,12 +346,12 @@ if run:
     vol = 0.0
     returns = close.pct_change().dropna()
     if len(returns) > 20:
-        vol = float(returns.rolling(20).std().iloc[-1])  # ensure scalar
-        vol = vol * np.sqrt(252) * 100
+        last_vol = returns.rolling(20).std().iloc[-1] # ensure scalar
+        vol = last_vol.item() * np.sqrt(252) * 100
     
     c1.metric("1M Return", f"{ret_1m:+.2f}%", delta=f"{ret_1m:+.1f}%" if abs(ret_1m) > 0.01 else None)
     c2.metric("Volatility", f"{vol:.1f}%" if vol > 0 else "—")
-    c3.metric("52W High", f"₹{float(close.max()):.2f}")
+    c3.metric("52W High", f"₹{close.max().item():.2f}")
     c4.metric("Latest Price", f"₹{latest_price:.2f}")
 
     X, y, scaler, scaled_all = prepare_sequences(close_vals, seq=seq_len)
@@ -520,11 +520,11 @@ if run:
             margin=dict(l=10, r=10, t=40, b=10),
             legend=dict(orientation="h"),
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
     st.markdown("## Predictions")
     col1, col2 = st.columns(2)
     try:
-        latest_pred = float(pred_prices[-1])
+        latest_pred = pred_prices[-1].item() if hasattr(pred_prices, "item") else float(pred_prices[-1])
     except Exception:
         latest_pred = None
 

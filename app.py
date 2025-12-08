@@ -14,14 +14,7 @@ torch.set_float32_matmul_precision("medium")  # Faster on newer CPUs
 np.set_printoptions(suppress=True)
 pd.set_option("display.float_format", "{:.2f}".format)
 
-# mode = st.toggle("🌗 Dark Mode", value=True, key="theme_mode")
 
-# if st.session_state.theme_mode:
-#     os.environ["STREAMLIT_CONFIG_FILE"] = "config_dark.toml"
-# else:
-#     os.environ["STREAMLIT_CONFIG_FILE"] = "config_light.toml"
-
-# st.rerun()  # reloads app with new config
 # ---------------------------
 # Page config & CSS
 # ---------------------------
@@ -55,8 +48,42 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+# Live S&P 500 Heatmap — Embed TradingView
+st.markdown("### Live Nifty 50 Heatmap (by TradingView)")
 
-
+st.components.v1.html(
+    """
+    <div style="width: 100%; height: 660px; margin: 0; padding: 0;">
+       
+<div class="tradingview-widget-container">
+  <div class="tradingview-widget-container__widget"></div>
+  <div class="tradingview-widget-copyright"><a href="https://www.tradingview.com/heatmap/stock/" rel="noopener nofollow" target="_blank"><span class="blue-text">Stock Heatmap</span></a><span class="trademark"> by TradingView</span></div>
+  <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-stock-heatmap.js" async>
+  {
+  "dataSource": "SPX500",
+  "blockSize": "market_cap_basic",
+  "blockColor": "change",
+  "grouping": "sector",
+  "locale": "en",
+  "symbolUrl": "",
+  "colorTheme": "dark", 
+  "exchanges": [],
+  "hasTopBar": false,
+  "isDataSetEnabled": false,
+  "isZoomEnabled": true,
+  "hasSymbolTooltip": true,
+  "isMonoSize": false,
+  "width": "100%",
+  "height": "100%"
+}
+  </script>
+</div>
+<!-- TradingView Widget END -->
+    </div>
+    """,
+    height=700,
+    scrolling=False
+)
 # ---------------------------
 # Model Status Renderer
 # ---------------------------

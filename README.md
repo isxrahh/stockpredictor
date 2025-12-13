@@ -10,7 +10,7 @@ The application combines **machine learning price forecasting**, **interactive f
 
 ## 🚀 Live Demo
 
-🔗 **Deployed App:** _[Add deployment URL here]_
+🔗 **Deployed App:** _[(https://stocckk-predictor.streamlit.app/)]
 
 ---
 
@@ -91,7 +91,7 @@ Embedded **TradingView & Trendlyne widgets**:
 | Search | Algolia |
 | Charts | Plotly |
 | Deployment | Docker |
-| Language | Python 3.11 |
+| Language | Python 3.13 |
 
 ---
 

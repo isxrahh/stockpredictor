@@ -8,7 +8,6 @@ from sklearn.preprocessing import MinMaxScaler
 import plotly.graph_objects as go
 from datetime import timedelta
 import requests
-from profile_widget import yahoo_card
 
 torch.set_float32_matmul_precision("medium")  # Faster on newer CPUs
 np.set_printoptions(suppress=True)

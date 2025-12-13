@@ -10,7 +10,7 @@ The application combines **machine learning price forecasting**, **interactive f
 
 ## 🚀 Live Demo
 
-🔗 **Deployed App:** _[(https://stocckk-predictor.streamlit.app/)]
+🔗 **Deployed App:** _https://stocckk-predictor.streamlit.app/
 
 ---
 

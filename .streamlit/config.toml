@@ -1,21 +1,21 @@
 ################################################################################
 # ☀️ LIGHT THEME
 ################################################################################
-# [theme]
-# base="light"
-# primaryColor="#005bea"
-# backgroundColor="#ffffff"
-# secondaryBackgroundColor="#f0f2f6"
-# textColor="#000000"
-# font="sans serif"
+[theme]
+ base="light"
+ primaryColor="#005bea"
+ backgroundColor="#ffffff"
+ secondaryBackgroundColor="#f0f2f6"
+ textColor="#000000"
+ font="sans serif"
 
 ################################################################################
 # 🌙 DARK THEME
 ################################################################################
 [theme]
-  base="dark"
-  primaryColor="#00c6fb"
-  backgroundColor="#0d1117"
-  secondaryBackgroundColor="#161b22"
-  textColor="#e6edf3"
-  font="sans serif"
+  #base="dark"
+  #primaryColor="#00c6fb"
+  #backgroundColor="#0d1117"
+  #secondaryBackgroundColor="#161b22"
+  #textColor="#e6edf3"
+  #font="sans serif"

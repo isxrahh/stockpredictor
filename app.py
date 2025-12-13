@@ -1,5 +1,4 @@
 import streamlit as st
-import os
 import yfinance as yf
 import pandas as pd
 import numpy as np
@@ -9,6 +8,7 @@ from sklearn.preprocessing import MinMaxScaler
 import plotly.graph_objects as go
 from datetime import timedelta
 import requests
+from profile_widget import yahoo_card
 
 torch.set_float32_matmul_precision("medium")  # Faster on newer CPUs
 np.set_printoptions(suppress=True)
@@ -354,7 +354,7 @@ if symbol is None:
                                 "grouping": "sector",
                                 "locale": "en",
                                 "symbolUrl": "",
-                                "colorTheme": "dark", 
+                                "colorTheme": "light", 
                                 "exchanges": [],
                                 "hasTopBar": false,
                                 "isDataSetEnabled": false,
@@ -449,7 +449,7 @@ if symbol is None:
                       "title": "Bajaj Finance"
                     }
                   ],
-                  "colorTheme": "dark",
+                  "colorTheme": "light",
                   "locale": "en",
                   "largeChartUrl": "",
                   "isTransparent": false,
@@ -481,7 +481,7 @@ if symbol is None:
                   "defaultScreen": "most_capitalized",
                   "isTransparent": false,
                   "locale": "en",
-                  "colorTheme": "dark",
+                  "colorTheme": "light",
                   "width": "100%",
                   "height": 550
                 }
@@ -506,7 +506,7 @@ if symbol is None:
                   {
                   "displayMode": "regular",
                   "feedMode": "all_symbols",
-                  "colorTheme": "dark",
+                  "colorTheme": "light",
                   "isTransparent": false,
                   "locale": "en",
                   "width": 520,
@@ -694,7 +694,7 @@ if run:
         )
 
     with right:
-        st.subheader(f"{choice} — Price Chart")
+        st.subheader(f"{symbol} — Price Chart")
         fig = go.Figure()
         fig.add_trace(
             go.Scatter(
@@ -778,40 +778,42 @@ if run:
     st.table(display_df)
 
 if st.session_state.get("show_widgets", False):
-
-    # ---------- TOP ROW ----------
-    col3, col4 = st.columns([3, 2])
     
-    with col3:
+    # ---------- MAIN ROW ----------
+    col1, col2 = st.columns([2, 3])
+    
+    with col1:
+        # Technical Analysis Widget
         st.components.v1.html(
             f"""
-            <div style="width:97%; height:235px; background:#1e1e1f; border-radius:5px; border: 0.2px solid #474647; padding:2px;">
+            <div style=" height:368px; border-radius:12px; padding:0 4px;">
               <div class="tradingview-widget-container">
                 <div class="tradingview-widget-container__widget"></div>
-                <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-symbol-info.js" async>
+                <script src="https://s3.tradingview.com/external-embedding/embed-widget-technical-analysis.js" async>
                 {{
                   "symbol": "{tv_symbol}",
-                  "colorTheme": "dark",
-                  "isTransparent": true,
+                  "colorTheme": "light",
+                  "displayMode": "single",
                   "locale": "en",
-                  "width": "97%"
+                  "width": "100%",
+                  "height": "100%"
                 }}
                 </script>
               </div>
             </div>
             """,
-            height=252
+            height=380
         )
-    
-    with col4:
+
+        # SWOT Analysis
         st.components.v1.html(
             f"""
-            <div style="border-radius:12px; margin-left:-4px; ">
+            <div style="border-radius:12px; margin-left:5px; ">
             
               <blockquote 
                 class="trendlyne-widgets"
                 data-get-url="https://trendlyne.com/web-widget/swot-widget/Poppins/{trend_symbol}/?posCol=60a5fa&primaryCol=3b82f6&negCol=ef4444&neuCol=f59e0b" 
-                data-theme="dark"
+                data-theme="light"
                 style="color:cornflowerblue;"
                 ">
               </blockquote>
@@ -822,42 +824,16 @@ if st.session_state.get("show_widgets", False):
         )
     
     
-    # ---------- MAIN ROW ----------
-    col1, col2 = st.columns([2, 3])
-    
-    with col1:
-        # Technical Analysis Widget
-        st.components.v1.html(
-            f"""
-            <div style=" height:500px; border-radius:12px; padding:0 4px;">
-              <div class="tradingview-widget-container">
-                <div class="tradingview-widget-container__widget"></div>
-                <script src="https://s3.tradingview.com/external-embedding/embed-widget-technical-analysis.js" async>
-                {{
-                  "symbol": "{tv_symbol}",
-                  "colorTheme": "dark",
-                  "displayMode": "single",
-                  "locale": "en",
-                  "width": "100%",
-                  "height": "100%"
-                }}
-                </script>
-              </div>
-            </div>
-            """,
-            height=520
-        )
-    
         # Profile Widget
         st.components.v1.html(
             f"""
-            <div style=" height:470px; border-radius:12px;">
+            <div style=" height:276px; border-radius:12px;">
               <div class="tradingview-widget-container">
                 <div class="tradingview-widget-container__widget"></div>
                 <script src="https://s3.tradingview.com/external-embedding/embed-widget-symbol-profile.js" async>
                 {{
                   "symbol": "{tv_symbol}",
-                  "colorTheme": "dark",
+                  "colorTheme": "light",
                   "locale": "en",
                   "width": "100%",
                   "height": "100%"
@@ -866,7 +842,7 @@ if st.session_state.get("show_widgets", False):
               </div>
             </div>
             """,
-            height=490
+            height=290
         )
     
     with col2:
@@ -878,7 +854,7 @@ if st.session_state.get("show_widgets", False):
                 <script src="https://s3.tradingview.com/external-embedding/embed-widget-financials.js" async>
                 {{
                   "symbol": "{tv_symbol}",
-                  "colorTheme": "dark",
+                  "colorTheme": "light",
                   "displayMode": "regular",
                   "locale": "en",
                   "width": "100%",

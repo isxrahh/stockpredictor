@@ -48,7 +48,7 @@ st.markdown(
             height:0px;
             margin:30px 0;
             box-shadow: 0 6px 18px rgba(0,0,0,0.06);
-            min-height: 120px;
+            min-height: 140px;
             display:flex;
             flex-direction:column; 
             justify-content:space-between;
@@ -57,7 +57,7 @@ st.markdown(
 
         .metric-title {
             color:#6b7280;
-            font-size:12px;
+            font-size:18px;
             margin-bottom:6px;
         }
 
@@ -139,7 +139,7 @@ def render_model_status(status: str):
         </style>
         <div class='card'><div class='metric-title'>Model Status</div>
         <h4 class='blink'>🟢 Training<span>.</span><span>.</span><span>.</span></h4>
-        <p style='opacity:0.75;margin-top:-12px;'>Learning from 2 years of data...</p></div>
+        <p style='opacity:0.75;margin-top:-12px;'>Learning from 5 years of data...</p></div>
         """
 
     elif status == "completed":
@@ -303,7 +303,7 @@ def generate_advice(pred_prices, latest_price, historical_returns, volatility):
     else:
         advice.append("Stable; monitor for external factors.")
 
-    avg_hist_return = historical_returns.mean() * 252 * 100
+    avg_hist_return = float(historical_returns.mean()) * 252 * 100
     advice.append(
         f"Compared to historical annualized return of {avg_hist_return:.2f}%, the forecast suggests {'stronger' if pred_return_30d / 30 * 252 > avg_hist_return else 'weaker'} performance."
     )
@@ -313,7 +313,14 @@ def generate_advice(pred_prices, latest_price, historical_returns, volatility):
     else:
         advice.append("Moderate volatility; suitable for conservative investors.")
 
-    return "\n".join(advice)
+    return {
+    "1d": pred_return_1d,
+    "5d": pred_return_5d,
+    "30d": pred_return_30d,
+    "comparison": avg_hist_return,
+    "volatility": volatility,
+    }
+
 
 
 # ---------------------------
@@ -367,8 +374,8 @@ with st.sidebar:
     # ---- Algolia search ----
     if query and len(query) >= 2:
         try:
-            ALGOLIA_APP_ID = "XM6V4TK0GI"
-            ALGOLIA_API_KEY = "f2739da0f5b32535dc8b656db109394c"
+            ALGOLIA_APP_ID = st.secrets.get("ALGOLIA_APP_ID")
+            ALGOLIA_API_KEY = st.secrets.get("ALGOLIA_API_KEY")
             ALGOLIA_INDEX_NAME = "sec_list"
             url = f"https://{ALGOLIA_APP_ID}-dsn.algolia.net/1/indexes/{ALGOLIA_INDEX_NAME}/query"
             headers = {
@@ -378,54 +385,55 @@ with st.sidebar:
             }
             payload = {"params": f"query={query}&hitsPerPage=10"}
             resp = requests.post(url, json=payload, headers=headers, timeout=5)
-            hits = resp.json().get("hits", []) if resp.status_code == 200 else []
-
-            company_options = [
-                {"name": h.get("Security Name", ""), "symbol": h.get("Symbol", "")}
-                for h in hits
-            ]
-            for opt in company_options:
-                if st.button(f"{opt['name']} ({opt['symbol']})", width="stretch"):
-                    st.session_state.company_name = opt["name"]
-                    st.session_state.company_symbol = opt["symbol"]
-                    st.rerun()
+            
+            if resp.status_code == 200:
+                hits = resp.json().get("hits", [])
+                company_options = [
+                    {"name": h.get("Security Name", "Unknown"), "symbol": h.get("Symbol", "N/A")}
+                    for h in hits
+                    if h.get("Security Name") and h.get("Symbol")  
+                ]
+                
+                if company_options:
+                    display_options = [f"{c['name']} ({c['symbol']})" for c in company_options]
+                    current_name = st.session_state.get("company_name")
+                    default_index = 0
+                    if current_name:
+                        try:
+                            default_index = next(i for i, c in enumerate(company_options) if c["name"] == current_name)
+                        except StopIteration:
+                            default_index = 0
+                    
+                    selected_display = st.selectbox(
+                        "Search Results",
+                        options=display_options,
+                        index=default_index,
+                        help="Choose a company to analyze"
+                    )
+                    
+                    selected_index = display_options.index(selected_display)
+                    chosen = company_options[selected_index]
+                    
+                    if (st.session_state.get("company_name") != chosen["name"] or
+                        st.session_state.get("company_symbol") != chosen["symbol"]):
+                        st.session_state.company_name = chosen["name"]
+                        st.session_state.company_symbol = chosen["symbol"]
+                        st.rerun()  
+                    
+                else:
+                    st.warning("No companies found for your search.")
+            else:
+                st.error(f"Search failed (status {resp.status_code})")
+                
         except Exception as e:
-            st.error(f"Algolia search error: {e}")
-
-    # ---- Show suggestions as buttons ----
-    if company_options:
-        st.markdown("**Suggestions:**")
-        for c in company_options:
-            if st.button(f"{c['name']} ({c['symbol']})"):
-                st.session_state["company_name"] = c["name"]
-                st.session_state["company_symbol"] = c["symbol"]
-
-        # ---- Dropdown to choose company ----
-        choice = st.selectbox(
-            "Choose company",
-            [c["name"] for c in company_options],
-            index=next(
-                (
-                    i
-                    for i, c in enumerate(company_options)
-                    if c["name"] == st.session_state.get("company_name")
-                ),
-                0,
-            ),
-        )
-        selected_company = next(
-            (c for c in company_options if c["name"] == choice), None
-        )
-        if selected_company:
-            st.session_state["company_name"] = selected_company["name"]
-            st.session_state["company_symbol"] = selected_company["symbol"]
-
+            st.error(f"Search error: {e}")
+    
     if st.session_state.get("company_symbol"):
         symbol = st.session_state["company_symbol"]
-        yf_symbol = symbol + ".NS"
-        st.success(f"Selected: {st.session_state['company_name']} ({symbol})")
+        yf_symbol = symbol + ".NS"  
+        st.success(f"**Selected:** {st.session_state['company_name']} ({symbol})")
     else:
-        st.info("Start typing to see company suggestions...")
+        st.info("🔍 Start typing a company name to see suggestions...")
         symbol = None
         yf_symbol = None
 
@@ -467,9 +475,8 @@ def build_tv_candidates(base):
 
 tv_candidates = build_tv_candidates(base_sym)
 
-st.write("Suggested TradingView candidates (pick one that renders):")
 chosen_tv = st.selectbox(
-    "TradingView symbol",
+    "",
     tv_candidates,
     index=0,
     help="If widget shows 'invalid symbol' try a different candidate here",
@@ -483,6 +490,7 @@ if symbol is None:
     st.warning(
         "Please select a company from the search box before running predictions."
     )
+
     ## OTHER WIDGETS OF TRADING VIEW
 
     # Live S&P 500 Heatmap — Embed TradingView
@@ -678,12 +686,12 @@ else:
 # Prediction code
 # ---------------------------
 
-run = st.button("Run Prediction", type="primary", use_container_width=True)
+run = st.button("Run Prediction", type="primary", width="stretch")
 if run:
     st.session_state.show_widgets = True
 
     with st.spinner("Fetching data..."):
-        df = download_data(yf_symbol, period="2y")
+        df = download_data(yf_symbol, period="5y")
 
     if df is None or df.empty:
         st.error("No data returned for this symbol.")
@@ -713,14 +721,60 @@ if run:
         else 0.0
     )
 
-    c1.metric(
-        "1M Return",
-        f"{ret_1m:+.2f}%",
-        delta=f"{ret_1m:+.1f}%" if abs(ret_1m) > 0.01 else None,
-    )
-    c2.metric("Volatility", f"{vol:.1f}%" if vol > 0 else "—")
-    c3.metric("52W High", f"₹{close.max().item():.2f}")
-    c4.metric("Latest Price", f"₹{latest_price:.2f}")
+    with c1:
+        st.markdown(
+            f"""
+            <div class='card'>
+                <div class='metric-title'>1M Return</div>
+                <h2>{ret_1m:+.2f}%</h2>
+                <p style='
+                    color:{"#22c55e" if ret_1m > 0.01 else "#ef4444"}; 
+                    background:{"#22c55e0f" if ret_1m > 0.01 else "#ef444421"}; 
+                    border-radius: 10px; 
+                    padding: 0px 12px; 
+                    width: fit-content;
+                    margin:7px 0px;
+                '
+                >
+                    {"↑" if ret_1m > 0.01 else "↓"} {abs(ret_1m):.1f}%
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    with c2:
+        st.markdown(
+            f"""
+            <div class='card'>
+                <div class='metric-title'>Volatility</div>
+                <h2>{vol:.1f}%</h2>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    with c3:
+        st.markdown(
+            f"""
+            <div class='card'>
+                <div class='metric-title'>52W High</div>
+                <h2>₹{close.max().item():.2f}</h2>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    with c4:
+        st.markdown(
+            f"""
+            <div class='card'>
+                <div class='metric-title'>Latest Price</div>
+                <h2>₹{latest_price:.2f}</h2>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
     X, y, scaler, last_sequence_scaled, input_size = prepare_return_sequences(
         close_vals, seq_len=seq_len
@@ -824,12 +878,25 @@ if run:
         pred_prices = np.array(pred_prices[1:])
         future_dates = get_future_dates(dates[-1], days_ahead)
 
+        # ---------------------------
+        # Generate AI Financial Advice
+        # ---------------------------
+        
+        advice_text = generate_advice(
+            pred_prices=pred_prices,
+            latest_price=latest_price,
+            historical_returns=returns,
+            volatility=vol
+        )
+
+
         pred_df = pd.DataFrame(
             {
                 "Date": [d.strftime("%Y-%m-%d") for d in future_dates],
                 "Predicted Price": pred_prices,
             }
         )
+
         st.download_button(
             "Download predictions (CSV)",
             data=pred_df.to_csv(index=False).encode("utf-8"),
@@ -886,7 +953,7 @@ if run:
             margin=dict(l=10, r=10, t=40, b=10),
             legend=dict(orientation="h"),
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     st.markdown("## Predictions")
     col1, col2 = st.columns(2)
@@ -993,6 +1060,91 @@ if st.session_state.get("show_widgets", False):
             """,
             height=1020,
         )
+    
+    advice = generate_advice(
+    pred_prices=pred_prices,
+    latest_price=latest_price,
+    historical_returns=returns,
+    volatility=vol
+    )
+
+    st.subheader("📊 AI Financial Advisor")
+
+    def badge(value, pos=2, neg=-2):
+        if value > pos:
+            return "🟢 BUY", "#22c55e"
+        elif value < neg:
+            return "🔴 SELL", "#ef4444"
+        else:
+            return "🟡 HOLD", "#f59e0b"
+    
+    b1, c1 = badge(advice["1d"])
+    b5, c5 = badge(advice["5d"], 5, -5)
+    b30, c30 = badge(advice["30d"], 10, -10)
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.markdown(
+            f"""
+            <div class="card">
+                <div class="metric-title">Short Term (1 Day)</div>
+                <h2>{advice["1d"]:+.2f}%</h2>
+                <span style="color:{c1}; font-weight:600;">{b1}</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    
+    with col2:
+        st.markdown(
+            f"""
+            <div class="card">
+                <div class="metric-title">Medium Term (5 Days)</div>
+                <h2>{advice["5d"]:+.2f}%</h2>
+                <span style="color:{c5}; font-weight:600;">{b5}</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    
+    with col3:
+        st.markdown(
+            f"""
+            <div class="card">
+                <div class="metric-title">Long Term (30 Days)</div>
+                <h2>{advice["30d"]:+.2f}%</h2>
+                <span style="color:{c30}; font-weight:600;">{b30}</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("### 🧠 AI Insight Summary")
+
+    relative_perf = (
+        "stronger" if advice["30d"] / 30 * 252 > advice["comparison"] else "weaker"
+    )
+    
+    risk_text = (
+        "High volatility — suitable for aggressive traders."
+        if advice["volatility"] > 30
+        else "Moderate volatility — suitable for conservative investors."
+    )
+    
+    st.markdown(
+        f"""
+        <div style="padding:30px; border-radius:12px; margin: 10px 7px; box-shadow: 0 6px 18px rgba(0,0,0,0.06); ">
+        • 📉 Expected annualized performance appears <b>{relative_perf}</b> compared to historical average<br>
+        <br/>
+        • 📊 Historical annual return: <b>{advice["comparison"]:.2f}%</b><br>
+        <br/>
+        • ⚠️ {risk_text}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
 
 
 st.caption("Demo app — Not financial advice. Data via Yahoo Finance & TwelveData API.")

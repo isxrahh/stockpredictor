@@ -9,6 +9,9 @@ import plotly.graph_objects as go
 from datetime import timedelta
 import requests
 
+from sklearn.preprocessing import StandardScaler
+from torch.utils.data import TensorDataset, DataLoader
+
 torch.set_float32_matmul_precision("medium")  # Faster on newer CPUs
 np.set_printoptions(suppress=True)
 pd.set_option("display.float_format", "{:.2f}".format)
@@ -17,25 +20,79 @@ pd.set_option("display.float_format", "{:.2f}".format)
 # ---------------------------
 # Page config & CSS
 # ---------------------------
+
 st.set_page_config(page_title="Stock AI Predictor", layout="wide", page_icon="📈")
 st.markdown(
     """
-<style>
-.header { font-size:28px; font-weight:700; background: linear-gradient(90deg,#005bea,#00c6fb);
--webkit-background-clip: text; -webkit-text-fill-color: transparent; padding-bottom: 4px; }
-.subtle { color: #6b7280; margin-top: -10px; margin-bottom: 10px; }
-.card { background: transparent; border: 1px solid #343a42 !important; border-radius: 12px; padding: 18px 20px; height:0px; margin:30px 0;
-box-shadow: 0 6px 18px rgba(0,0,0,0.06); min-height: 120px; display:flex; flex-direction:column; 
-justify-content:space-between; border:1px solid #f3f4f6; }
-.metric-title { color:#6b7280; font-size:12px; margin-bottom:6px; }
-.card h2,.card h3{ margin:0; padding:0; }
-[data-testid="column"]{ padding-right:10px; }
-.status-row{ display:flex; align-items:center; gap:8px; }
-.status-dot{ width:12px; height:12px; border-radius:50%; background:#22c55e; }
-.big-font { font-size: 46px !important; font-weight: bold; background: linear-gradient(90deg,#667eea,#764ba2);
-                 -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin:0; }
-    </style>
-""",
+        <style>
+        .header {
+            font-size:28px;
+            font-weight:700;
+            background: linear-gradient(90deg,#005bea,#00c6fb);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            padding-bottom: 4px;
+        }
+
+        .subtle {
+            color: #6b7280;
+            margin-top: -10px;
+            margin-bottom: 10px;
+        }
+
+        .card {
+            background: transparent;
+            border: 1px solid #343a42 !important;
+            border-radius: 12px;
+            padding: 18px 20px;
+            height:0px;
+            margin:30px 0;
+            box-shadow: 0 6px 18px rgba(0,0,0,0.06);
+            min-height: 120px;
+            display:flex;
+            flex-direction:column; 
+            justify-content:space-between;
+            border:1px solid #f3f4f6;
+        }
+
+        .metric-title {
+            color:#6b7280;
+            font-size:12px;
+            margin-bottom:6px;
+        }
+
+        .card h2,.card h3 {
+            margin:0; padding:0;
+        }
+
+        [data-testid="column"] {
+            padding-right:10px;
+        }
+
+        .status-row {
+            display:flex;
+            align-items:center;
+            gap:8px;
+        }
+
+        .status-dot {
+            width:12px;
+            height:12px;
+            border-radius:50%;
+            background:#22c55e;
+        }
+
+        .big-font {
+            font-size: 46px !important;
+            font-weight: bold;
+            background: linear-gradient(90deg,#667eea,#764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin:0;
+        }
+        
+        </style>
+    """,
     unsafe_allow_html=True,
 )
 
@@ -50,67 +107,102 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+
 # ---------------------------
 # Model Status Renderer
 # ---------------------------
+
+
 def render_model_status(status: str):
     if status == "pending":
-        return "<div class='card'><div class='metric-title'>Model Status</div><h4>🟡 Pending</h4><p style='opacity:0.75;margin-top:-12px;'>Click <b>Run Prediction</b> to start.</p></div>"
+        return (
+            "<div class='card'>"
+            "<div class='metric-title'>Model Status</div>"
+            "<h4>🟡 Pending</h4>"
+            "<p style='opacity:0.75;margin-top:-12px;'>Click <b>Run Prediction</b> to start.</p>"
+            "</div>"
+        )
+
     elif status == "training":
         return """
-        <style>@keyframes blink {0% {opacity:0.2;} 20% {opacity:1;} 100% {opacity:0.2;}}
-        .blink span {animation: blink 1.4s infinite both;}
-        .blink span:nth-child(2) { animation-delay:.2s; } .blink span:nth-child(3) { animation-delay:.4s; }
+        <style>
+        @keyframes blink {0% {opacity:0.2;} 20% {opacity:1;} 100% {opacity:0.2;}}
+        .blink span {
+            animation: blink 1.4s infinite both;
+        }
+        .blink span:nth-child(2) {
+            animation-delay:.2s; 
+        } 
+        .blink span:nth-child(3) { 
+            animation-delay:.4s; 
+        }
         </style>
         <div class='card'><div class='metric-title'>Model Status</div>
         <h4 class='blink'>🟢 Training<span>.</span><span>.</span><span>.</span></h4>
         <p style='opacity:0.75;margin-top:-12px;'>Learning from 2 years of data...</p></div>
         """
+
     elif status == "completed":
-        return "<div class='card'><div class='metric-title'>Model Status</div><h4 style='color:#4caf50;'>✅ Completed</h4><p style='opacity:0.75;margin-top:-12px;'>Predictions generated.</p></div>"
+        return (
+            "<div class='card'>"
+            "<div class='metric-title'>Model Status</div>"
+            "<h4 style='color:#4caf50;'>✅ Completed</h4>"
+            "<p style='opacity:0.75;margin-top:-12px;'>Predictions generated.</p>"
+            "</div>"
+        )
+
     elif status == "failed":
-        return "<div class='card'><div class='metric-title'>Model Status</div><h4 style='color:#ff5252;'>❌ Failed</h4><p style='opacity:0.75;margin-top:-12px;'>Check logs & retry.</p></div>"
+        return (
+            "<div class='card'>"
+            "<div class='metric-title'>Model Status</div>"
+            "<h4 style='color:#ff5252;'>❌ Failed</h4>"
+            "<p style='opacity:0.75;margin-top:-12px;'>Check logs & retry.</p>"
+            "</div>"
+        )
+
     else:
         return "<p>Invalid model status</p>"
 
 
 # ---------------------------
-# LSTM Model
+# LSTM Model (Improved for stability)
 # ---------------------------
 class Brain(nn.Module):
-    def __init__(self, input_size=1, hidden_size=50, num_layers=1):
+    def __init__(self, input_size=2, hidden_size=256, num_layers=3, dropout=0.2):
         super().__init__()
         self.lstm = nn.LSTM(
             input_size=input_size,
             hidden_size=hidden_size,
             num_layers=num_layers,
             batch_first=True,
+            dropout=dropout if num_layers > 1 else 0.0,
+            bidirectional=True,
         )
-        self.fc = nn.Linear(hidden_size, 1)
+        self.fc = nn.Linear(hidden_size * 2, 1)
 
     def forward(self, x):
         if x.dim() == 2:
             x = x.unsqueeze(0)
-        h0 = torch.zeros(1, x.size(0), 50)
-        c0 = torch.zeros(1, x.size(0), 50)
-        out, _ = self.lstm(x, (h0, c0))
+        out, _ = self.lstm(x)
         return self.fc(out[:, -1, :])
 
 
 # ---------------------------
 # Helpers
 # ---------------------------
+
+
 @st.cache_data(show_spinner=False, ttl=3600)
-def download_data(symbol: str, period: str = "2y"):
-    TWELVE_DATA_KEY = st.secrets.get("TWELVE_DATA_KEY") or "your_key_here"
+def download_data(symbol: str, period: str = "5y"):
+    TWELVE_DATA_KEY = (
+        st.secrets.get("TWELVE_DATA_KEY") or "5a1f3871569543aca6034279f126b3c8"
+    )
     if TWELVE_DATA_KEY != "5a1f3871569543aca6034279f126b3c8":
         url = f"https://api.twelvedata.com/time_series"
         params = {
-            "symbol": symbol.replace(
-                ".NS", ""
-            ),  # Twelve Data uses RELIANCE, not RELIANCE.NS
+            "symbol": symbol.replace(".NS", ""),
             "interval": "1day",
-            "outputsize": 730,  # ~2 years
+            "outputsize": 1825,  # ~5 years
             "apikey": TWELVE_DATA_KEY,
             "dp": 5,
             "format": "JSON",
@@ -137,14 +229,30 @@ def download_data(symbol: str, period: str = "2y"):
     return df[["Close"]].dropna()
 
 
-def prepare_sequences(close_values: np.ndarray, seq: int = 60):
-    scaler = MinMaxScaler()
-    scaled = scaler.fit_transform(close_values.astype(np.float32))
+def prepare_return_sequences(close_prices: np.ndarray, seq_len: int = 90):
+    # Log returns
+    log_returns = np.diff(np.log(close_prices))
+    log_returns = np.concatenate([[0.0], log_returns])
+
+    returns_series = pd.Series(log_returns)
+    volatility = returns_series.rolling(20).std().fillna(0.0).values
+
+    features = np.column_stack([log_returns, volatility])
+
+    scaler = StandardScaler()
+    scaled_features = scaler.fit_transform(features)
+
     X, y = [], []
-    for i in range(seq, len(scaled)):
-        X.append(scaled[i - seq : i, :])
-        y.append(scaled[i, :])
-    return np.array(X), np.array(y), scaler, scaled
+    for i in range(seq_len, len(scaled_features)):
+        X.append(scaled_features[i - seq_len : i])
+        y.append(scaled_features[i, 0])
+
+    X = np.array(X)
+    y = np.array(y)
+
+    last_seq = scaled_features[-seq_len:]
+
+    return X, y, scaler, last_seq, scaled_features.shape[1]
 
 
 def get_future_dates(last_date, n):
@@ -158,47 +266,95 @@ def get_future_dates(last_date, n):
 
 
 # ---------------------------
+# Financial Advisor Helpers
+# ---------------------------
+
+
+def generate_advice(pred_prices, latest_price, historical_returns, volatility):
+
+    pred_return_1d = (pred_prices[0] / latest_price - 1) * 100
+    pred_return_5d = (
+        (pred_prices[4] / latest_price - 1) * 100
+        if len(pred_prices) >= 5
+        else pred_return_1d
+    )
+    pred_return_30d = (pred_prices[-1] / latest_price - 1) * 100
+
+    advice = []
+    advice.append(f"Short-term (1 day): Expected return {pred_return_1d:+.2f}%. ")
+    if pred_return_1d > 2:
+        advice.append("Strong buy signal if aligned with your risk tolerance.")
+    elif pred_return_1d < -2:
+        advice.append("Consider selling or hedging positions.")
+    else:
+        advice.append("Hold position; minimal movement expected.")
+
+    advice.append(f"Medium-term (5 days): Expected return {pred_return_5d:+.2f}%. ")
+    if pred_return_5d > 5:
+        advice.append("Positive momentum; potential entry point for swing trades.")
+    elif pred_return_5d < -5:
+        advice.append("Caution: Downtrend may persist.")
+
+    advice.append(f"Long-term (30 days): Expected return {pred_return_30d:+.2f}%. ")
+    if pred_return_30d > 10:
+        advice.append("Bullish outlook; consider accumulating shares.")
+    elif pred_return_30d < -10:
+        advice.append("Bearish; diversify or exit if overexposed.")
+    else:
+        advice.append("Stable; monitor for external factors.")
+
+    avg_hist_return = historical_returns.mean() * 252 * 100
+    advice.append(
+        f"Compared to historical annualized return of {avg_hist_return:.2f}%, the forecast suggests {'stronger' if pred_return_30d / 30 * 252 > avg_hist_return else 'weaker'} performance."
+    )
+
+    if volatility > 30:
+        advice.append("High volatility stock; use stop-loss orders to manage risk.")
+    else:
+        advice.append("Moderate volatility; suitable for conservative investors.")
+
+    return "\n".join(advice)
+
+
+# ---------------------------
 # Sidebar
 # ---------------------------
 with st.sidebar:
     st.header("Controls & Search")
-
-    # ---- Single search input ----
     query = st.text_input(
         "Search company", placeholder="Type company name...", key="search_inp"
     )
 
     st.markdown(
         """
-<style>
-[data-testid="stTextInput"] > div > div > input {
-    padding-left: 38px !important;   /* space for logo */
-}
-
-/* Logo container */
-.logo-icon {
-    position: absolute;
-    left: 10px;
-    bottom: 29px;
-    width: 20px;
-    height: 20px;
-    opacity: 0.7;
-}
-
-/* Position wrapper */
-.stTextInput {
-    position: relative;
-}
-</style>
-
-<div class="logo-icon">
-    <img src="https://logosandtypes.com/wp-content/uploads/2023/11/algolia.svg" width="20"/>
-</div>
-""",
+            <style>
+            [data-testid="stTextInput"] > div > div > input {
+                padding-left: 38px !important;   /* space for logo */
+            }
+            
+            /* Logo container */
+            .logo-icon {
+                position: absolute;
+                left: 10px;
+                bottom: 29px;
+                width: 20px;
+                height: 20px;
+                opacity: 0.7;
+            }
+            
+            /* Position wrapper */
+            .stTextInput {
+                position: relative;
+            }
+            </style>
+            
+            <div class="logo-icon">
+                <img src="https://logosandtypes.com/wp-content/uploads/2023/11/algolia.svg" width="20"/>
+            </div>
+        """,
         unsafe_allow_html=True,
     )
 
-    # ---- Initialize session state ----
     if "company_name" not in st.session_state:
         st.session_state["company_name"] = None
     if "company_symbol" not in st.session_state:
@@ -257,8 +413,6 @@ with st.sidebar:
                 0,
             ),
         )
-
-        # Update session state if dropdown changed
         selected_company = next(
             (c for c in company_options if c["name"] == choice), None
         )
@@ -266,7 +420,6 @@ with st.sidebar:
             st.session_state["company_name"] = selected_company["name"]
             st.session_state["company_symbol"] = selected_company["symbol"]
 
-    # ---- Final selection ----
     if st.session_state.get("company_symbol"):
         symbol = st.session_state["company_symbol"]
         yf_symbol = symbol + ".NS"
@@ -285,50 +438,46 @@ with st.sidebar:
     epochs = st.slider("Training epochs", 5, 200, 35)
     st.markdown("---")
     st.caption("Demo trains on CPU. Not financial advice.")
-    # ────────────────────── SAFETY CHECK – DO NOT PUT ANYTHING ABOVE THIS ──────────────────────
+
     if "symbol" not in locals() and st.session_state.get("company_symbol"):
         symbol = st.session_state["company_symbol"]
     elif "symbol" not in locals():
         symbol = None
-    # ────────────────────── NOW "symbol" ALWAYS EXISTS ──────────────────────
-
-# ---------- Robust TradingView symbol selection ----------
-# `symbol` here is what you get from Algolia, e.g. "TCS" or "RELIANCE" or "AAPL"
 base_sym = symbol.upper() if symbol else ""
 
+
 def build_tv_candidates(base):
-    # Prioritized guess-list — prefer Indian exchanges first (NSE/BSE),
-    # then US exchanges, then plain base as last resort.
     if not base:
         return [""]
 
     candidates = []
-    # Indian style (user likely searching Indian stocks)
     candidates.append(f"NSE:{base}")
     candidates.append(f"BSE:{base}")
-    # Common global prefixes
     candidates.append(f"NASDAQ:{base}")
     candidates.append(f"NYSE:{base}")
-    # Plain ticker (some widgets accept just the base)
     candidates.append(base)
-    # dedupe while preserving order
-    seen = set(); uniq = []
+    seen = set()
+    uniq = []
     for c in candidates:
         if c not in seen:
-            uniq.append(c); seen.add(c)
+            uniq.append(c)
+            seen.add(c)
     return uniq
+
 
 tv_candidates = build_tv_candidates(base_sym)
 
-# Show the candidates and let user pick — default to first (NSE:...) so Indian tickers map nicely.
 st.write("Suggested TradingView candidates (pick one that renders):")
-chosen_tv = st.selectbox("TradingView symbol", tv_candidates, index=0, help="If widget shows 'invalid symbol' try a different candidate here")
+chosen_tv = st.selectbox(
+    "TradingView symbol",
+    tv_candidates,
+    index=0,
+    help="If widget shows 'invalid symbol' try a different candidate here",
+)
 
-# set final variables used by widgets
 tv_symbol = chosen_tv
-trend_symbol = base_sym 
+trend_symbol = base_sym
 
-# Stop if no company is selected
 # ---------------------------
 if symbol is None:
     st.warning(
@@ -528,7 +677,8 @@ else:
 # ---------------------------
 # Prediction code
 # ---------------------------
-run = st.button("Run Prediction")
+
+run = st.button("Run Prediction", type="primary", use_container_width=True)
 if run:
     st.session_state.show_widgets = True
 
@@ -547,27 +697,21 @@ if run:
     if len(close) < 100:
         st.error("Not enough data (need at least 100 close prices).")
         st.stop()
+
     dates = close.index
-    close_vals = close.values.reshape(-1, 1).astype(np.float32)
-    latest_price = float(close_vals[-1, 0])
-    # ─────── 4 SAFE METRIC CARDS ───────
+    close_vals = close.values.astype(np.float32).flatten()
+    latest_price = float(close_vals[-1])
+
     c1, c2, c3, c4 = st.columns(4)
-
-    # Ensure scalars
-    latest_price = float(latest_price)
     close_21d = close.iloc[-21].item()
+    ret_1m = (latest_price / close_21d - 1) * 100 if len(close) > 21 else 0.0
 
-    # 1M return
-    ret_1m = 0.0
-    if len(close) > 21:
-        ret_1m = (latest_price / close_21d - 1) * 100
-
-    # Volatility (safe)
-    vol = 0.0
     returns = close.pct_change().dropna()
-    if len(returns) > 20:
-        last_vol = returns.rolling(20).std().iloc[-1]  # ensure scalar
-        vol = last_vol.item() * np.sqrt(252) * 100
+    vol = (
+        (returns.rolling(20).std().iloc[-1] * np.sqrt(252) * 100).item()
+        if len(returns) > 20
+        else 0.0
+    )
 
     c1.metric(
         "1M Return",
@@ -578,13 +722,10 @@ if run:
     c3.metric("52W High", f"₹{close.max().item():.2f}")
     c4.metric("Latest Price", f"₹{latest_price:.2f}")
 
-    X, y, scaler, scaled_all = prepare_sequences(close_vals, seq=seq_len)
+    X, y, scaler, last_sequence_scaled, input_size = prepare_return_sequences(
+        close_vals, seq_len=seq_len
+    )
 
-    if X.ndim != 3 or X.shape[2] != 1:
-        st.error(f"Unexpected X shape: {X.shape}. Expect (N, {seq_len}, 1).")
-        st.stop()
-
-    # --- Status cards ---
     col_a, col_b, col_c = st.columns([1, 1, 1], gap="medium")
     col_a.markdown(
         f"<div class='card'><div class='metric-title'>Latest Close</div><h2>₹{latest_price:.2f}</h2></div>",
@@ -601,135 +742,135 @@ if run:
 
     with left:
         st.subheader("Model training")
-        st.write("Training a small LSTM on the last 2 years of closing prices.")
+        st.write("Training LSTM on log returns for stable predictions...")
 
-        st.session_state.model_status = "training"
         status_placeholder.markdown(
             render_model_status("training"), unsafe_allow_html=True
         )
 
         try:
-            model = Brain(input_size=1, hidden_size=50, num_layers=1)
-            optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+            model = Brain(hidden_size=128, num_layers=2, dropout=0.3)
+            optimizer = torch.optim.AdamW(model.parameters(), lr=0.0005, weight_decay=1e-5)            
             loss_fn = nn.MSELoss()
 
-            X_t = torch.from_numpy(X).float()  # (N, seq, 1)
-            y_t = torch.from_numpy(y).float()  # (N, 1)
+            dataset = TensorDataset(
+                torch.from_numpy(X).float(), torch.from_numpy(y).float()
+            )
+            loader = DataLoader(dataset, batch_size=32, shuffle=True)
 
-            progress_text = st.empty()
             progress_bar = st.progress(0)
+            progress_text = st.empty()
 
             model.train()
-            for ep in range(epochs):
-                optimizer.zero_grad()
-                out = model(X_t)  # (N,1)
-                loss = loss_fn(out, y_t)
-                loss.backward()
-                optimizer.step()
-                progress_fraction = (ep + 1) / epochs
-                progress_bar.progress(progress_fraction)
-                progress_text.text(f"Epoch {ep+1}/{epochs} — loss {loss.item():.6f}")
+            for epoch in range(epochs):
+                epoch_loss = 0.0
+                for bx, by in loader:
+                    optimizer.zero_grad()
+                    pred = model(bx)
+                    loss = loss_fn(pred, by)
+                    loss.backward()
+                    optimizer.step()
+                    epoch_loss += loss.item()
+                progress_bar.progress((epoch + 1) / epochs)
+                progress_text.text(
+                    f"Epoch {epoch+1}/{epochs} – Loss: {epoch_loss/len(loader):.6f}"
+                )
 
-            progress_text.text("Training complete.")
-            st.success("Model trained ✅")
-
-            st.session_state.model_status = "completed"
+            st.success("Model trained successfully!")
             status_placeholder.markdown(
                 render_model_status("completed"), unsafe_allow_html=True
             )
 
         except Exception as e:
-            st.session_state.model_status = "failed"
             status_placeholder.markdown(
                 render_model_status("failed"), unsafe_allow_html=True
             )
             st.error(f"Training failed: {e}")
             st.stop()
 
-        # switch to eval mode for prediction
         model.eval()
-
         pred_container = st.container()
         with pred_container:
-            st.write("Generating future predictions...")
+            st.write("Generating predictions...")
             pred_progress = st.progress(0)
-            pred_status = st.empty()
-
-        preds = []
-        current = scaled_all[-seq_len:].copy()
-
+        
+        predictions_scaled = []
+        current_seq = last_sequence_scaled.copy()  
+        
         with torch.no_grad():
             for i in range(days_ahead):
-                x = torch.from_numpy(current).float().unsqueeze(0)
-                p_t = model(x)
-                p = float(p_t.item())
-                preds.append(p)
-                current = np.vstack([current[1:], [[p]]]).astype(np.float32)
-
-                # Update progress
-                progress = (i + 1) / days_ahead
-                pred_progress.progress(progress)
-                pred_status.markdown(
-                    f"Predicting day **{i+1}/{days_ahead}** → ₹{p:.2f}"
-                )
-
+                input_t = torch.from_numpy(current_seq).float().unsqueeze(0)
+                pred_scaled = model(input_t).item() 
+                
+                predictions_scaled.append(pred_scaled)
+                
+                new_row = np.array([[pred_scaled, 0.0]])
+                current_seq = np.vstack([current_seq[1:], new_row])
+                
+                pred_progress.progress((i + 1) / days_ahead)
+        
         pred_progress.progress(1.0)
-        pred_status.success("All predictions ready!")
         pred_container.empty()
-        pred_prices = scaler.inverse_transform(np.array(preds).reshape(-1, 1)).flatten()
+        
+        pred_padded = np.column_stack([
+            np.array(predictions_scaled),
+            np.zeros(len(predictions_scaled))
+        ])
+        pred_returns = scaler.inverse_transform(pred_padded)[:, 0]
+        
+        pred_prices = [latest_price]
+        for r in pred_returns:
+            pred_prices.append(pred_prices[-1] * np.exp(r))
+        pred_prices = np.array(pred_prices[1:])
         future_dates = get_future_dates(dates[-1], days_ahead)
+
         pred_df = pd.DataFrame(
             {
                 "Date": [d.strftime("%Y-%m-%d") for d in future_dates],
                 "Predicted Price": pred_prices,
             }
         )
-        csv = pred_df.to_csv(index=False).encode("utf-8")
         st.download_button(
             "Download predictions (CSV)",
-            data=csv,
+            data=pred_df.to_csv(index=False).encode("utf-8"),
             file_name=f"{symbol}_predictions.csv",
             mime="text/csv",
         )
 
+    # Chart
     with right:
         st.subheader(f"{symbol} — Price Chart")
         fig = go.Figure()
         fig.add_trace(
             go.Scatter(
                 x=dates,
-                y=close_vals.flatten(),
+                y=close_vals,
                 mode="lines",
                 name="Close",
                 line=dict(color="#1f77b4"),
             )
         )
-        try:
-            df_ma = pd.DataFrame({"Close": close_vals.flatten()}, index=dates)
-            df_ma["MA20"] = df_ma["Close"].rolling(20).mean()
-            df_ma["MA50"] = df_ma["Close"].rolling(50).mean()
-            fig.add_trace(
-                go.Scatter(
-                    x=df_ma.index,
-                    y=df_ma["MA20"],
-                    mode="lines",
-                    name="MA20",
-                    line=dict(dash="dash"),
-                )
-            )
-            fig.add_trace(
-                go.Scatter(
-                    x=df_ma.index,
-                    y=df_ma["MA50"],
-                    mode="lines",
-                    name="MA50",
-                    line=dict(dash="dot"),
-                )
-            )
-        except Exception:
-            pass
 
-        # plot predictions
+        df_ma = pd.DataFrame({"Close": close_vals}, index=dates)
+        fig.add_trace(
+            go.Scatter(
+                x=df_ma.index,
+                y=df_ma["Close"].rolling(20).mean(),
+                mode="lines",
+                name="MA20",
+                line=dict(dash="dash"),
+            )
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=df_ma.index,
+                y=df_ma["Close"].rolling(50).mean(),
+                mode="lines",
+                name="MA50",
+                line=dict(dash="dot"),
+            )
+        )
+
         fig.add_trace(
             go.Scatter(
                 x=future_dates,
@@ -739,34 +880,23 @@ if run:
                 marker=dict(color="#ef553b", size=8),
             )
         )
+
         fig.update_layout(
             height=520,
             margin=dict(l=10, r=10, t=40, b=10),
             legend=dict(orientation="h"),
         )
-        st.plotly_chart(fig, width="stretch")
+        st.plotly_chart(fig, use_container_width=True)
+
     st.markdown("## Predictions")
     col1, col2 = st.columns(2)
-    try:
-        latest_pred = (
-            pred_prices[-1].item()
-            if hasattr(pred_prices, "item")
-            else float(pred_prices[-1])
-        )
-    except Exception:
-        latest_pred = None
-
-    pct_change = None
-    if latest_pred is not None:
-        pct_change = (latest_pred - latest_price) / latest_price * 100
+    latest_pred = float(pred_prices[-1])
+    pct_change = (latest_pred - latest_price) / latest_price * 100
 
     col1.metric("Latest Closing Price", f"₹{latest_price:.2f}")
-    if latest_pred is not None:
-        col2.metric(
-            f"Predicted in {days_ahead} days",
-            f"₹{latest_pred:.2f}",
-            f"{pct_change:.2f}%",
-        )
+    col2.metric(
+        f"Predicted in {days_ahead} days", f"₹{latest_pred:.2f}", f"{pct_change:+.2f}%"
+    )
 
     display_df = pd.DataFrame(
         {
@@ -777,10 +907,9 @@ if run:
     st.table(display_df)
 
 if st.session_state.get("show_widgets", False):
-    
-    # ---------- MAIN ROW ----------
+
     col1, col2 = st.columns([2, 3])
-    
+
     with col1:
         # Technical Analysis Widget
         st.components.v1.html(
@@ -801,7 +930,7 @@ if st.session_state.get("show_widgets", False):
               </div>
             </div>
             """,
-            height=380
+            height=380,
         )
 
         # SWOT Analysis
@@ -819,10 +948,9 @@ if st.session_state.get("show_widgets", False):
               <script async src="https://cdn-static.trendlyne.com/static/js/webwidgets/tl-widgets.js"></script>
             </div>
             """,
-            height=310
+            height=310,
         )
-    
-    
+
         # Profile Widget
         st.components.v1.html(
             f"""
@@ -841,9 +969,9 @@ if st.session_state.get("show_widgets", False):
               </div>
             </div>
             """,
-            height=290
+            height=290,
         )
-    
+
     with col2:
         st.components.v1.html(
             f"""
@@ -863,8 +991,8 @@ if st.session_state.get("show_widgets", False):
               </div>
             </div>
             """,
-            height=1020
+            height=1020,
         )
-    
+
 
 st.caption("Demo app — Not financial advice. Data via Yahoo Finance & TwelveData API.")

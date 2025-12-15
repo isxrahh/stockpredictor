@@ -168,6 +168,7 @@ def render_model_status(status: str):
 # LSTM Model (Improved for stability)
 # ---------------------------
 class Brain(nn.Module):
+    
     def __init__(self, input_size=2, hidden_size=256, num_layers=3, dropout=0.2):
         super().__init__()
         self.lstm = nn.LSTM(
@@ -322,6 +323,14 @@ def generate_advice(pred_prices, latest_price, historical_returns, volatility):
     }
 
 
+def realistic_advisor(lstm_ret):
+    if lstm_ret  > 0:
+        return "🟢 Bullish bias (models agree)"
+    elif lstm_ret < 0 :
+        return "🔴 Bearish bias (models agree)"
+    else:
+        return "🟡 Mixed signals (high uncertainty)"
+
 
 # ---------------------------
 # Sidebar
@@ -437,7 +446,7 @@ with st.sidebar:
         symbol = None
         yf_symbol = None
 
-    # Other controls
+
     days_ahead = st.slider("Predict next how many trading days?", 1, 30, 10)
     retrain_every_run = st.checkbox("Retrain model every run", value=True)
     seq_len = st.number_input(
@@ -476,8 +485,9 @@ def build_tv_candidates(base):
 tv_candidates = build_tv_candidates(base_sym)
 
 chosen_tv = st.selectbox(
-    "",
+    "TradingView Symbol",
     tv_candidates,
+    label_visibility="hidden",
     index=0,
     help="If widget shows 'invalid symbol' try a different candidate here",
 )
@@ -803,37 +813,50 @@ if run:
         )
 
         try:
-            model = Brain(hidden_size=128, num_layers=2, dropout=0.3)
-            optimizer = torch.optim.AdamW(model.parameters(), lr=0.0005, weight_decay=1e-5)            
-            loss_fn = nn.MSELoss()
-
-            dataset = TensorDataset(
-                torch.from_numpy(X).float(), torch.from_numpy(y).float()
-            )
-            loader = DataLoader(dataset, batch_size=32, shuffle=True)
-
-            progress_bar = st.progress(0)
-            progress_text = st.empty()
-
-            model.train()
-            for epoch in range(epochs):
-                epoch_loss = 0.0
-                for bx, by in loader:
-                    optimizer.zero_grad()
-                    pred = model(bx)
-                    loss = loss_fn(pred, by)
-                    loss.backward()
-                    optimizer.step()
-                    epoch_loss += loss.item()
-                progress_bar.progress((epoch + 1) / epochs)
-                progress_text.text(
-                    f"Epoch {epoch+1}/{epochs} – Loss: {epoch_loss/len(loader):.6f}"
+            if retrain_every_run or "trained_model" not in st.session_state:
+                st.info("Training LSTM model...")
+        
+                model = Brain(hidden_size=128, num_layers=2, dropout=0.3)
+                optimizer = torch.optim.AdamW(
+                    model.parameters(), lr=0.0005, weight_decay=1e-5
                 )
+                loss_fn = nn.MSELoss()
+        
+                dataset = TensorDataset(
+                    torch.from_numpy(X).float(), torch.from_numpy(y).float()
+                )
+                loader = DataLoader(dataset, batch_size=32, shuffle=True)
+        
+                progress_bar = st.progress(0)
+                progress_text = st.empty()
+        
+                model.train()
+                for epoch in range(epochs):
+                    epoch_loss = 0.0
+                    for bx, by in loader:
+                        optimizer.zero_grad()
+                        pred = model(bx)
+                        loss = loss_fn(pred, by)
+                        loss.backward()
+                        optimizer.step()
+                        epoch_loss += loss.item()
+        
+                    progress_bar.progress((epoch + 1) / epochs)
+                    progress_text.text(
+                        f"Epoch {epoch+1}/{epochs} – Loss: {epoch_loss/len(loader):.6f}"
+                    )
+        
+                st.session_state.trained_model = model
+                st.success("Model trained successfully!")
 
-            st.success("Model trained successfully!")
+            else:
+                model = st.session_state.trained_model
+                st.success("Using cached LSTM model")
+        
             status_placeholder.markdown(
                 render_model_status("completed"), unsafe_allow_html=True
             )
+
 
         except Exception as e:
             status_placeholder.markdown(
@@ -881,13 +904,6 @@ if run:
         # ---------------------------
         # Generate AI Financial Advice
         # ---------------------------
-        
-        advice_text = generate_advice(
-            pred_prices=pred_prices,
-            latest_price=latest_price,
-            historical_returns=returns,
-            volatility=vol
-        )
 
 
         pred_df = pd.DataFrame(
@@ -972,6 +988,7 @@ if run:
         }
     )
     st.table(display_df)
+
 
 if st.session_state.get("show_widgets", False):
 
@@ -1147,4 +1164,6 @@ if st.session_state.get("show_widgets", False):
 
 
 
-st.caption("Demo app — Not financial advice. Data via Yahoo Finance & TwelveData API.")
+st.caption(
+    "LSTM signals reflect short-term patterns. "
+)
